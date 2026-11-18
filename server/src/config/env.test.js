@@ -25,4 +25,10 @@ describe('production JWT secret validation', () => {
       'must be different'
     );
   });
+
+  it('accepts distinct secrets of at least 32 characters', () => {
+    expect(() =>
+      validateProductionJwtSecrets('production', 'a'.repeat(32), 'r'.repeat(32))
+    ).not.toThrow();
+  });
 });
