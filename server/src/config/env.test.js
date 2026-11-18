@@ -18,4 +18,11 @@ describe('production JWT secret validation', () => {
       'JWT_REFRESH_SECRET'
     );
   });
+
+  it('requires access and refresh secrets to be different', () => {
+    const secret = 's'.repeat(32);
+    expect(() => validateProductionJwtSecrets('production', secret, secret)).toThrow(
+      'must be different'
+    );
+  });
 });
