@@ -31,4 +31,9 @@ describe('production JWT secret validation', () => {
       validateProductionJwtSecrets('production', 'a'.repeat(32), 'r'.repeat(32))
     ).not.toThrow();
   });
+
+  it('does not impose production requirements on development secrets', () => {
+    expect(() => validateProductionJwtSecrets('development', 'dev-access-secret', 'dev-refresh-secret'))
+      .not.toThrow();
+  });
 });
