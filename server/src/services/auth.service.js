@@ -24,49 +24,70 @@ export const technicianProfileInclude = {
   ],
 };
 
-export async function findFullUser(userId) {
-  return User.findByPk(userId, { include: [technicianProfileInclude] });
+export async function findFullUser(userId, options = {}) {
+  return User.findByPk(userId, { ...options, include: [technicianProfileInclude] });
 }
 
 /**
  * Creates an access token + rotating refresh token. Only the SHA-256 hash of
  * the refresh JWT is persisted, so a database leak cannot replay sessions.
  */
-export async function issueSession(user, req, res) {
-  const { signAccessToken } = await import('../utils/jwt.js');
-  const accessToken = signAccessToken(user);
+export async function issueSession(user, req, res, { transaction, setCookie = true } = {}) {
   const refreshToken = generateRefreshToken(user);
-  await RefreshToken.create({
+  const session = await RefreshToken.create({
     userId: user.id,
     tokenHash: hashToken(refreshToken),
     expiresAt: new Date(Date.now() + env.jwt.refreshDays * 24 * 60 * 60 * 1000),
     userAgent: req.get('user-agent')?.slice(0, 255) || null,
     ip: req.ip,
-  });
-  res.cookie('refreshToken', refreshToken, refreshCookieOptions());
-  return accessToken;
+  }, { transaction });
+  const { signAccessToken } = await import('../utils/jwt.js');
+  const accessToken = signAccessToken(user, session.id);
+  if (setCookie) res.cookie('refreshToken', refreshToken, refreshCookieOptions());
+  return { accessToken, refreshToken };
 }
 
 export async function registerUser(input, req, res) {
-  const existing = await User.unscoped().findOne({ where: { email: input.email } });
-  if (existing) throw ApiError.conflict('An account with that email already exists');
-
   const passwordHash = await bcrypt.hash(input.password, 12);
-  const user = await User.create({
-    name: input.name,
-    email: input.email,
-    passwordHash,
-    phone: input.phone || null,
-    role: input.role,
-  });
+  try {
+    const result = await User.sequelize.transaction(async (transaction) => {
+      const existing = await User.unscoped().findOne({
+        where: { email: input.email },
+        transaction,
+      });
+      if (existing) throw ApiError.conflict('An account with that email already exists');
 
-  if (input.role === 'technician') {
-    await TechnicianProfile.create({ userId: user.id });
+      const user = await User.create({
+        name: input.name,
+        email: input.email,
+        passwordHash,
+        phone: input.phone || null,
+        role: input.role,
+      }, { transaction });
+
+      if (input.role === 'technician') {
+        await TechnicianProfile.create({ userId: user.id }, { transaction });
+      }
+
+      const { accessToken, refreshToken } = await issueSession(user, req, res, {
+        transaction,
+        setCookie: false,
+      });
+      const fullUser = await findFullUser(user.id, { transaction });
+      return { accessToken, refreshToken, user: fullUser };
+    });
+
+    res.cookie('refreshToken', result.refreshToken, refreshCookieOptions());
+    return { accessToken: result.accessToken, user: result.user };
+  } catch (error) {
+    if (
+      error.name === 'SequelizeUniqueConstraintError' &&
+      error.errors?.some((item) => item.path === 'email')
+    ) {
+      throw ApiError.conflict('An account with that email already exists');
+    }
+    throw error;
   }
-
-  const accessToken = await issueSession(user, req, res);
-  const fullUser = await findFullUser(user.id);
-  return { accessToken, user: fullUser };
 }
 
 export async function loginUser(input, req, res) {
@@ -76,7 +97,7 @@ export async function loginUser(input, req, res) {
   }
   if (!user.isActive) throw ApiError.forbidden('This account has been deactivated');
 
-  const accessToken = await issueSession(user, req, res);
+  const { accessToken } = await issueSession(user, req, res);
   const fullUser = await findFullUser(user.id);
   return { accessToken, user: fullUser };
 }
@@ -105,9 +126,19 @@ export async function refreshSession(rawToken, req, res) {
   const user = await User.findByPk(payload.sub);
   if (!user || !user.isActive) throw ApiError.unauthorized('Account is not active');
 
-  record.revokedAt = new Date();
-  await record.save();
-  const accessToken = await issueSession(user, req, res);
+  const [revokedCount] = await RefreshToken.update(
+    { revokedAt: new Date() },
+    {
+      where: {
+        id: record.id,
+        revokedAt: null,
+        expiresAt: { [Op.gt]: new Date() },
+      },
+    }
+  );
+  if (!revokedCount) throw ApiError.unauthorized('Refresh token has already been used');
+
+  const { accessToken } = await issueSession(user, req, res);
   const fullUser = await findFullUser(user.id);
   return { accessToken, user: fullUser };
 }
@@ -122,6 +153,56 @@ export async function revokeSession(rawToken) {
 
 export async function revokeAllSessions(userId) {
   await RefreshToken.update({ revokedAt: new Date() }, { where: { userId, revokedAt: null } });
+}
+
+export async function listActiveSessions(userId, currentToken) {
+  const records = await RefreshToken.findAll({
+    where: {
+      userId,
+      revokedAt: null,
+      expiresAt: { [Op.gt]: new Date() },
+    },
+    attributes: ['id', 'tokenHash', 'userAgent', 'ip', 'createdAt', 'expiresAt'],
+    order: [['createdAt', 'DESC']],
+  });
+  const currentTokenHash = currentToken ? hashToken(currentToken) : null;
+
+  return records.map((record) => ({
+    id: record.id,
+    userAgent: record.userAgent,
+    ip: record.ip,
+    createdAt: record.createdAt,
+    expiresAt: record.expiresAt,
+    isCurrent: record.tokenHash === currentTokenHash,
+  }));
+}
+
+export async function revokeSessionById(userId, sessionId, currentToken) {
+  const record = await RefreshToken.findOne({
+    where: {
+      id: sessionId,
+      userId,
+      revokedAt: null,
+      expiresAt: { [Op.gt]: new Date() },
+    },
+    attributes: ['id', 'tokenHash'],
+  });
+  if (!record) throw ApiError.notFound('Session not found or already revoked');
+
+  const [revokedCount] = await RefreshToken.update(
+    { revokedAt: new Date() },
+    {
+      where: {
+        id: record.id,
+        userId,
+        revokedAt: null,
+        expiresAt: { [Op.gt]: new Date() },
+      },
+    }
+  );
+  if (!revokedCount) throw ApiError.notFound('Session not found or already revoked');
+
+  return Boolean(currentToken && record.tokenHash === hashToken(currentToken));
 }
 
 export async function requestPasswordReset(email) {
@@ -168,6 +249,10 @@ export async function resetPassword(token, newPassword) {
     const user = await User.findByPk(resetRecord.userId, { transaction, lock: transaction.LOCK.UPDATE });
     if (!user || !user.isActive) {
       throw ApiError.badRequest('This password reset link is invalid or expired');
+    }
+
+    if (await bcrypt.compare(newPassword, user.passwordHash)) {
+      throw ApiError.badRequest('Choose a password you have not used before');
     }
 
     await user.update({ passwordHash: await bcrypt.hash(newPassword, 12) }, { transaction });

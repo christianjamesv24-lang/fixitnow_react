@@ -2,10 +2,12 @@ import crypto from 'node:crypto';
 import jwt from 'jsonwebtoken';
 import { env } from '../config/env.js';
 
-export function signAccessToken(user) {
-  return jwt.sign({ sub: String(user.id), role: user.role }, env.jwt.accessSecret, {
-    expiresIn: env.jwt.accessTtl,
-  });
+export function signAccessToken(user, sessionId) {
+  return jwt.sign(
+    { sub: String(user.id), role: user.role, sid: String(sessionId) },
+    env.jwt.accessSecret,
+    { expiresIn: env.jwt.accessTtl }
+  );
 }
 
 export function verifyAccessToken(token) {

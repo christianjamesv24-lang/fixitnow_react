@@ -17,6 +17,8 @@ import {
   refresh,
   logout,
   me,
+  sessions,
+  revokeSessionByIdController,
   updateProfile,
   uploadAvatar,
   changePassword,
@@ -33,6 +35,8 @@ router.post('/reset-password', passwordResetLimiter, validateBody(resetPasswordS
 router.post('/refresh', authLimiter, refresh);
 router.post('/logout', logout);
 router.get('/me', authenticate, me);
+router.get('/sessions', authenticate, sessions);
+router.delete('/sessions/:id', authenticate, revokeSessionByIdController);
 router.patch('/me', authenticate, validateBody(updateProfileSchema), updateProfile);
 router.post(
   '/me/avatar',

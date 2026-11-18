@@ -1,6 +1,7 @@
+import { Op } from 'sequelize';
 import ApiError from '../utils/ApiError.js';
 import { verifyAccessToken } from '../utils/jwt.js';
-import { User } from '../models/index.js';
+import { RefreshToken, User } from '../models/index.js';
 
 /** Verifies the Bearer access token, then reloads the user so bans/deletes apply immediately. */
 export async function authenticate(req, res, next) {
@@ -14,6 +15,19 @@ export async function authenticate(req, res, next) {
       payload = verifyAccessToken(token);
     } catch {
       throw ApiError.unauthorized('Access token is invalid or expired');
+    }
+
+    if (payload.sid) {
+      const session = await RefreshToken.findOne({
+        where: {
+          id: payload.sid,
+          userId: payload.sub,
+          revokedAt: null,
+          expiresAt: { [Op.gt]: new Date() },
+        },
+        attributes: ['id'],
+      });
+      if (!session) throw ApiError.unauthorized('Session has been revoked');
     }
 
     const user = await User.findByPk(payload.sub, {

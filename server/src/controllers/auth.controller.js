@@ -7,12 +7,14 @@ import { refreshCookieOptions } from '../utils/jwt.js';
 import {
   findFullUser,
   loginUser,
+  listActiveSessions,
   refreshSession,
   requestPasswordReset,
   resetPassword,
   registerUser,
   revokeAllSessions,
   revokeSession,
+  revokeSessionById,
 } from '../services/auth.service.js';
 
 const cookieClearOptions = { ...refreshCookieOptions(), maxAge: undefined };
@@ -73,6 +75,22 @@ export const logout = asyncHandler(async (req, res) => {
   res.json({ success: true, message: 'Logged out', data: null });
 });
 
+export const sessions = asyncHandler(async (req, res) => {
+  const items = await listActiveSessions(req.user.id, req.cookies.refreshToken);
+  res.json({ success: true, message: 'Active sessions', data: { items } });
+});
+
+export const revokeSessionByIdController = asyncHandler(async (req, res) => {
+  const sessionId = Number(req.params.id);
+  if (!Number.isSafeInteger(sessionId) || sessionId < 1) {
+    throw ApiError.badRequest('Session ID must be a positive integer');
+  }
+
+  const current = await revokeSessionById(req.user.id, sessionId, req.cookies.refreshToken);
+  if (current) res.clearCookie('refreshToken', cookieClearOptions);
+  res.json({ success: true, message: 'Session revoked', data: { current } });
+});
+
 export const me = asyncHandler(async (req, res) => {
   const user = await findFullUser(req.user.id);
   res.json({ success: true, message: 'OK', data: { user: userJSON(user) } });
@@ -98,6 +116,9 @@ export const changePassword = asyncHandler(async (req, res) => {
   const user = await req.user.reload({ include: [{ association: 'technicianProfile' }] });
   const matches = await bcrypt.compare(req.body.currentPassword, user.passwordHash);
   if (!matches) throw ApiError.badRequest('Current password is incorrect');
+  if (await bcrypt.compare(req.body.newPassword, user.passwordHash)) {
+    throw ApiError.badRequest('Choose a password you have not used before');
+  }
   user.passwordHash = await bcrypt.hash(req.body.newPassword, 12);
   await user.save();
   await revokeAllSessions(user.id);

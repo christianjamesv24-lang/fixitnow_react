@@ -35,8 +35,12 @@ describe('admin routes', () => {
     const reset = await request(app)
       .post('/api/v1/auth/reset-password')
       .send({ token: 'short', newPassword: 'weak' });
+    const sessions = await request(app).get('/api/v1/auth/sessions');
+    const revokeSession = await request(app).delete('/api/v1/auth/sessions/1');
 
     expect(forgot.status).toBe(400);
     expect(reset.status).toBe(400);
+    expect(sessions.status).toBe(401);
+    expect(revokeSession.status).toBe(401);
   });
 });

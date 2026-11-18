@@ -47,6 +47,11 @@ export default function ProfilePage() {
     queryFn: () => api.get('/technicians/meta').then((res) => res.data.data),
     staleTime: 5 * 60 * 1000,
   });
+  const sessionsQuery = useQuery({
+    queryKey: ['auth', 'sessions'],
+    queryFn: () => api.get('/auth/sessions').then((res) => res.data.data.items),
+    enabled: tab === 'security',
+  });
 
   const saveProfile = useMutation({
     mutationFn: (values) => api.patch('/auth/me', values).then((res) => res.data.data.user),
@@ -103,6 +108,21 @@ export default function ProfilePage() {
       navigate('/login', { replace: true });
     },
     onError: (error) => toast.error(apiErrorMessage(error)),
+  });
+
+  const sessionMutation = useMutation({
+    mutationFn: (id) => api.delete(`/auth/sessions/${id}`).then((res) => res.data.data),
+    onSuccess: async ({ current }) => {
+      if (current) {
+        toast.success('This session was revoked. Please sign in again.');
+        await logout();
+        navigate('/login', { replace: true });
+        return;
+      }
+      toast.success('Session revoked');
+      queryClient.invalidateQueries({ queryKey: ['auth', 'sessions'] });
+    },
+    onError: (error) => toast.error(apiErrorMessage(error, 'Could not revoke that session')),
   });
 
   if (!user) return <PageLoader />;
@@ -337,55 +357,121 @@ export default function ProfilePage() {
       )}
 
       {tab === 'security' && (
-        <div className="card mt-4 p-5 sm:p-6">
-          <h2 className="text-lg font-bold text-slate-900">Change password</h2>
-          <p className="mt-0.5 text-sm text-slate-500">
-            Changing your password logs you out on every device.
-          </p>
-          <form
-            onSubmit={passwordForm.handleSubmit((values) =>
-              passwordMutation.mutate({ currentPassword: values.currentPassword, newPassword: values.newPassword })
+        <div className="mt-4 space-y-4">
+          <section className="card p-5 sm:p-6">
+            <h2 className="text-lg font-bold text-slate-900">Change password</h2>
+            <p className="mt-0.5 text-sm text-slate-500">
+              Changing your password logs you out on every device.
+            </p>
+            <form
+              onSubmit={passwordForm.handleSubmit((values) =>
+                passwordMutation.mutate({ currentPassword: values.currentPassword, newPassword: values.newPassword })
+              )}
+              className="mt-5 max-w-lg space-y-4"
+            >
+              <Field label="Current password" htmlFor="current-password" error={passwordForm.formState.errors.currentPassword?.message} required>
+                <input
+                  id="current-password"
+                  type="password"
+                  className="input"
+                  autoComplete="current-password"
+                  {...passwordForm.register('currentPassword', { required: 'Current password is required' })}
+                />
+              </Field>
+              <Field label="New password" htmlFor="new-password" error={passwordForm.formState.errors.newPassword?.message} required hint="At least 8 characters.">
+                <input
+                  id="new-password"
+                  type="password"
+                  className="input"
+                  autoComplete="new-password"
+                  {...passwordForm.register('newPassword', {
+                    required: 'New password is required',
+                    minLength: { value: 8, message: 'Use at least 8 characters' },
+                  })}
+                />
+              </Field>
+              <Field label="Confirm new password" htmlFor="confirm-new-password" error={passwordForm.formState.errors.confirmPassword?.message} required>
+                <input
+                  id="confirm-new-password"
+                  type="password"
+                  className="input"
+                  autoComplete="new-password"
+                  {...passwordForm.register('confirmPassword', {
+                    required: 'Please confirm the new password',
+                    validate: (value) => value === passwordForm.watch('newPassword') || 'Passwords do not match',
+                  })}
+                />
+              </Field>
+              <button type="submit" className="btn-primary" disabled={passwordMutation.isPending}>
+                {passwordMutation.isPending && <Spinner />}
+                Update password
+              </button>
+            </form>
+          </section>
+
+          <section className="card p-5 sm:p-6">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <h2 className="text-lg font-bold text-slate-900">Active sessions</h2>
+                <p className="mt-0.5 text-sm text-slate-500">
+                  Sign out devices you no longer use. Revoking this device will sign you out.
+                </p>
+              </div>
+              <button
+                type="button"
+                className="btn-secondary btn-sm"
+                onClick={() => sessionsQuery.refetch()}
+                disabled={sessionsQuery.isFetching}
+              >
+                {sessionsQuery.isFetching ? <Spinner className="h-4 w-4" /> : <Icon name="refresh" className="h-4 w-4" />}
+                Refresh
+              </button>
+            </div>
+
+            {sessionsQuery.isLoading && <div className="mt-5 skeleton h-20" />}
+            {sessionsQuery.isError && (
+              <div className="mt-4">
+                <ErrorState message="Could not load active sessions." onRetry={sessionsQuery.refetch} />
+              </div>
             )}
-            className="mt-5 max-w-lg space-y-4"
-          >
-            <Field label="Current password" htmlFor="current-password" error={passwordForm.formState.errors.currentPassword?.message} required>
-              <input
-                id="current-password"
-                type="password"
-                className="input"
-                autoComplete="current-password"
-                {...passwordForm.register('currentPassword', { required: 'Current password is required' })}
-              />
-            </Field>
-            <Field label="New password" htmlFor="new-password" error={passwordForm.formState.errors.newPassword?.message} required hint="At least 8 characters.">
-              <input
-                id="new-password"
-                type="password"
-                className="input"
-                autoComplete="new-password"
-                {...passwordForm.register('newPassword', {
-                  required: 'New password is required',
-                  minLength: { value: 8, message: 'Use at least 8 characters' },
-                })}
-              />
-            </Field>
-            <Field label="Confirm new password" htmlFor="confirm-new-password" error={passwordForm.formState.errors.confirmPassword?.message} required>
-              <input
-                id="confirm-new-password"
-                type="password"
-                className="input"
-                autoComplete="new-password"
-                {...passwordForm.register('confirmPassword', {
-                  required: 'Please confirm the new password',
-                  validate: (value) => value === passwordForm.watch('newPassword') || 'Passwords do not match',
-                })}
-              />
-            </Field>
-            <button type="submit" className="btn-primary" disabled={passwordMutation.isPending}>
-              {passwordMutation.isPending && <Spinner />}
-              Update password
-            </button>
-          </form>
+            {sessionsQuery.isSuccess && sessionsQuery.data.length === 0 && (
+              <p className="mt-4 rounded-xl bg-slate-50 p-4 text-sm text-slate-500">
+                No active sessions were found.
+              </p>
+            )}
+            <div className="mt-4 space-y-3">
+              {(sessionsQuery.data || []).map((session) => (
+                <div key={session.id} className="flex flex-col gap-3 rounded-xl border border-slate-200 p-4 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="min-w-0">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <p className="break-all text-sm font-semibold text-slate-800">
+                        {session.userAgent || 'Unknown device'}
+                      </p>
+                      {session.isCurrent && <span className="badge-brand">This device</span>}
+                    </div>
+                    <p className="mt-1 text-xs text-slate-500">
+                      IP {session.ip || 'unavailable'} · Signed in{' '}
+                      {new Date(session.createdAt).toLocaleString()}
+                    </p>
+                    <p className="mt-0.5 text-xs text-slate-400">
+                      Expires {new Date(session.expiresAt).toLocaleString()}
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    className="btn-secondary btn-sm shrink-0 text-rose-700 hover:bg-rose-50"
+                    onClick={() => sessionMutation.mutate(session.id)}
+                    disabled={sessionMutation.isPending}
+                  >
+                    {sessionMutation.isPending && sessionMutation.variables === session.id
+                      ? <Spinner className="h-4 w-4" />
+                      : <Icon name="logout" className="h-4 w-4" />}
+                    Revoke
+                  </button>
+                </div>
+              ))}
+            </div>
+          </section>
         </div>
       )}
 
