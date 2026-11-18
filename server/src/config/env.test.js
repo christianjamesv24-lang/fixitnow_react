@@ -9,4 +9,13 @@ describe('production JWT secret validation', () => {
       'JWT_REFRESH_SECRET'
     );
   });
+
+  it('rejects short secrets even when they are present', () => {
+    expect(() => validateProductionJwtSecrets('production', 'a'.repeat(31), 'r'.repeat(32))).toThrow(
+      'JWT_ACCESS_SECRET'
+    );
+    expect(() => validateProductionJwtSecrets('production', 'a'.repeat(32), 'r'.repeat(31))).toThrow(
+      'JWT_REFRESH_SECRET'
+    );
+  });
 });
