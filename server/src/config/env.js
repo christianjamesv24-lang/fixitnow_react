@@ -8,12 +8,33 @@ export const serverRoot = path.resolve(__dirname, '../..');
 dotenv.config({ path: path.join(serverRoot, '.env'), quiet: true });
 
 const isTest = process.env.NODE_ENV === 'test';
+const nodeEnv = process.env.NODE_ENV || 'development';
+
+export function validateProductionJwtSecrets(environment, accessSecret, refreshSecret) {
+  if (environment !== 'production') return;
+
+  if (accessSecret.length < 32) {
+    throw new Error('JWT_ACCESS_SECRET must be at least 32 characters in production.');
+  }
+  if (refreshSecret.length < 32) {
+    throw new Error('JWT_REFRESH_SECRET must be at least 32 characters in production.');
+  }
+  if (accessSecret === refreshSecret) {
+    throw new Error('JWT_ACCESS_SECRET and JWT_REFRESH_SECRET must be different in production.');
+  }
+}
+
+const jwtAccessSecret = process.env.JWT_ACCESS_SECRET || (nodeEnv === 'production' ? '' : 'dev-access-secret');
+const jwtRefreshSecret =
+  process.env.JWT_REFRESH_SECRET || (nodeEnv === 'production' ? '' : 'dev-refresh-secret');
+
+validateProductionJwtSecrets(nodeEnv, jwtAccessSecret, jwtRefreshSecret);
 
 const defaultClientUrl =
   process.env.CLIENT_URL || process.env.RENDER_EXTERNAL_URL || 'http://localhost:5173';
 
 export const env = {
-  nodeEnv: process.env.NODE_ENV || 'development',
+  nodeEnv,
   isTest,
   port: Number(process.env.PORT || 5000),
   clientUrl: defaultClientUrl,
@@ -36,8 +57,8 @@ export const env = {
     sslCa: process.env.DB_SSL_CA || '',
   },
   jwt: {
-    accessSecret: process.env.JWT_ACCESS_SECRET || 'dev-access-secret',
-    refreshSecret: process.env.JWT_REFRESH_SECRET || 'dev-refresh-secret',
+    accessSecret: jwtAccessSecret,
+    refreshSecret: jwtRefreshSecret,
     accessTtl: process.env.ACCESS_TOKEN_TTL || '15m',
     refreshDays: Number(process.env.REFRESH_TOKEN_TTL_DAYS || 30),
   },
