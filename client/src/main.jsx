@@ -8,6 +8,9 @@ import queryClient from './lib/queryClient';
 import { AuthProvider } from './contexts/AuthContext';
 import { ToastProvider } from './contexts/ToastContext';
 import { SocketProvider } from './contexts/SocketContext';
+import { registerSW } from 'virtual:pwa-register';
+
+registerSW({ immediate: true });
 
 createRoot(document.getElementById('root')).render(
   <StrictMode>
