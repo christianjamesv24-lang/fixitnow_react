@@ -5,7 +5,9 @@ services:
     command: --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci
     environment:
       MYSQL_DATABASE: ${DB_NAME:-fixitnow}
-      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-change-this-root-password}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?Set MYSQL_ROOT_PASSWORD in the root .env file}
+      MYSQL_USER: ${MYSQL_APP_USER:-fixitnow}
+      MYSQL_PASSWORD: ${MYSQL_APP_PASSWORD:?Set MYSQL_APP_PASSWORD in the root .env file}
     volumes:
       - db_data:/var/lib/mysql
     healthcheck:
@@ -32,8 +34,8 @@ services:
       COOKIE_SECURE: ${COOKIE_SECURE:-}
       DB_HOST: db
       DB_PORT: 3306
-      DB_USER: root
-      DB_PASSWORD: ${MYSQL_ROOT_PASSWORD:-change-this-root-password}
+      DB_USER: ${MYSQL_APP_USER:-fixitnow}
+      DB_PASSWORD: ${MYSQL_APP_PASSWORD:?Set MYSQL_APP_PASSWORD in the root .env file}
       DB_NAME: ${DB_NAME:-fixitnow}
       DB_SSL: ${DB_SSL:-false}
       DB_SSL_CA: ${DB_SSL_CA:-}
