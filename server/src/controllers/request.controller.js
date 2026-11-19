@@ -286,19 +286,6 @@ export const createRequest = asyncHandler(async (req, res) => {
           where: { isActive: true },
           required: true,
         },
-        {
-          association: 'skills',
-          through: { attributes: [] },
-          attributes: ['id'],
-          where: { id: body.categoryId },
-          required: true,
-        },
-        {
-          association: 'areas',
-          attributes: ['city'],
-          where: { city: address.city },
-          required: true,
-        },
       ],
     });
 
@@ -397,8 +384,6 @@ export const availableJobs = asyncHandler(async (req, res) => {
   if (query.categoryId) where.categoryId = query.categoryId;
   if (query.city) where.city = query.city;
 
-  const skillIds = (profile.skills || []).map((skill) => skill.id);
-  const cities = (profile.areas || []).map((area) => area.city);
   if (query.q) {
     where[Op.or] = [
       { issueDescription: { [Op.like]: `%${query.q}%` } },
@@ -407,26 +392,12 @@ export const availableJobs = asyncHandler(async (req, res) => {
     ];
   }
 
-  if (!skillIds.length) {
-    return res.json({
-      success: true,
-      message: 'OK',
-      data: pagedData([], 0, page, limit),
-    });
-  }
-  where.categoryId = where.categoryId
-    ? { [Op.eq]: where.categoryId }
-    : { [Op.in]: skillIds };
-  where.city = {
-    [Op.in]: query.city ? cities.filter((city) => city === query.city) : cities,
-  };
-
   const { count, rows } = await ServiceRequest.findAndCountAll({
     where,
     include: listIncludes(req.user),
     order: [
-      ['preferredDate', 'ASC'],
-      ['createdAt', 'ASC'],
+      ['createdAt', 'DESC'],
+      ['id', 'DESC'],
     ],
     limit,
     offset,

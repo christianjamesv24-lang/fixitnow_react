@@ -207,63 +207,72 @@ export async function assertCategoriesExist(ids) {
  * occupy those keys. Reconcile instead of delete-and-recreate so a city or day
  * can be removed and added again without violating the index.
  */
-export async function replaceAreas(profileId, cities, actorId) {
+export async function replaceAreas(profileId, cities, actorId, transaction) {
   if (!cities) return;
+  const options = { transaction };
   const wanted = new Set(cities.map((city) => city.trim()).filter(Boolean));
   const existing = await TechnicianArea.unscoped().findAll({
     where: { technicianProfileId: profileId },
+    ...options,
   });
 
   for (const area of existing) {
     if (wanted.has(area.city)) {
       if (area.deletedAt) {
-        await area.restore();
-        await area.update({ deletedBy: null });
+        await area.restore(options);
+        await area.update({ deletedBy: null }, options);
       }
       wanted.delete(area.city);
     } else if (!area.deletedAt) {
-      await area.update({ deletedBy: actorId });
-      await area.destroy();
+      await area.update({ deletedBy: actorId }, options);
+      await area.destroy(options);
     }
   }
 
   if (wanted.size) {
     await TechnicianArea.bulkCreate(
-      [...wanted].map((city) => ({ technicianProfileId: profileId, city }))
+      [...wanted].map((city) => ({ technicianProfileId: profileId, city })),
+      options
     );
   }
 }
 
-export async function replaceAvailability(profileId, availability, actorId) {
+export async function replaceAvailability(profileId, availability, actorId, transaction) {
   if (!availability) return;
+  const options = { transaction };
   const byDay = new Map(availability.map((row) => [Number(row.dayOfWeek), row]));
   const existing = await TechnicianAvailability.unscoped().findAll({
     where: { technicianProfileId: profileId },
+    ...options,
   });
 
   for (const row of existing) {
     const next = byDay.get(Number(row.dayOfWeek));
     if (next) {
       if (row.deletedAt) {
-        await row.restore();
-        await row.update({ deletedBy: null });
+        await row.restore(options);
+        await row.update({ deletedBy: null }, options);
       }
-      await row.update({
-        startTime: next.startTime,
-        endTime: next.endTime,
-        isActive: next.isActive ?? true,
-      });
+      await row.update(
+        {
+          startTime: next.startTime,
+          endTime: next.endTime,
+          isActive: next.isActive ?? true,
+        },
+        options
+      );
       byDay.delete(Number(row.dayOfWeek));
     } else if (!row.deletedAt) {
-      await row.update({ deletedBy: actorId });
-      await row.destroy();
+      await row.update({ deletedBy: actorId }, options);
+      await row.destroy(options);
     }
   }
 
   const remaining = [...byDay.values()];
   if (remaining.length) {
     await TechnicianAvailability.bulkCreate(
-      remaining.map((row) => ({ ...row, technicianProfileId: profileId }))
+      remaining.map((row) => ({ ...row, technicianProfileId: profileId })),
+      options
     );
   }
 }

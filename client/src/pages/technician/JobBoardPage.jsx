@@ -37,7 +37,7 @@ export default function JobBoardPage() {
     <div className="mx-auto max-w-5xl">
       <PageHeader
         title="Job board"
-        subtitle="Open requests matched to your skills and service areas, plus every job assigned to you."
+        subtitle="All open customer requests, plus every job assigned to you."
         actions={
           <button type="button" className="btn-secondary" onClick={() => query.refetch()} disabled={query.isFetching}>
             <Icon name="refresh" className={cn('h-4 w-4', query.isFetching && 'animate-spin')} />
@@ -90,7 +90,7 @@ export default function JobBoardPage() {
                 title={tab === 'available' ? 'No matching open jobs' : 'No assigned jobs yet'}
                 text={
                   tab === 'available'
-                    ? 'New requests appear here when their category and city match your profile. Check back soon or update your service areas.'
+                    ? 'New requests appear here as soon as a customer submits them. Check back soon.'
                     : 'Accept a job from the available tab and it will show up here.'
                 }
                 action={
@@ -118,8 +118,7 @@ export default function JobBoardPage() {
 
       <div className="mt-6 flex items-start gap-2 rounded-xl border border-slate-200 bg-white px-4 py-3 text-xs leading-relaxed text-slate-500">
         <Icon name="info" className="mt-0.5 h-4 w-4 shrink-0 text-brand-700" />
-        The board only shows jobs in your listed categories and cities. Direct booking requests
-        appear in My jobs before acceptance.
+        The board shows all open requests. Direct booking requests appear in My jobs before acceptance.
       </div>
     </div>
   );

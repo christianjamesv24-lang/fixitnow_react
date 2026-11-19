@@ -154,8 +154,8 @@ export const updateMyTechnicianProfile = asyncHandler(async (req, res) => {
         );
       }
     }
-    await replaceAreas(profile.id, cities, req.user.id);
-    await replaceAvailability(profile.id, availability, req.user.id);
+    await replaceAreas(profile.id, cities, req.user.id, transaction);
+    await replaceAvailability(profile.id, availability, req.user.id, transaction);
     await transaction.commit();
   } catch (error) {
     await transaction.rollback();
