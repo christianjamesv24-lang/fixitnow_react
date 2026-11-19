@@ -81,7 +81,6 @@ export const listTechnicians = asyncHandler(async (req, res) => {
     limit,
     offset,
     distinct: true,
-    subQuery: false,
   });
 
   let items = rows.map(publicProfileJSON);
