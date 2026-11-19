@@ -37,7 +37,12 @@ export async function subscribeToPush(publicKey) {
     throw new Error('Notification permission was denied in your browser settings.');
   }
 
-  const registration = await navigator.serviceWorker.ready;
+  const registration = await Promise.race([
+    navigator.serviceWorker.ready,
+    new Promise((_, reject) =>
+      window.setTimeout(() => reject(new Error('Service worker is not ready yet')), 6000)
+    ),
+  ]);
   let subscription = await registration.pushManager.getSubscription();
   if (!subscription) {
     subscription = await registration.pushManager.subscribe({

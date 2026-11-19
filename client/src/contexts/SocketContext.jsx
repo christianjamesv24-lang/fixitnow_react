@@ -58,6 +58,19 @@ export function SocketProvider({ children }) {
       });
       toast.info(notification.body || notification.title, { title: notification.title });
     };
+    const onChatMessage = (message) => {
+      queryClient.invalidateQueries({ queryKey: ['conversations'] });
+      if (Number(message?.senderId) === Number(user.id)) return;
+      const title = `New message from ${message?.sender?.name || 'FixitNow'}`;
+      const body = message?.type === 'image' ? 'Photo' : message?.type === 'location' ? 'Shared a location' : message?.body || '';
+      showDesktopNotification({
+        title,
+        body,
+        url: `/messages?conversation=${message.conversationId}`,
+        tag: `chat-${message.id}`,
+      });
+      toast.info(body || 'New message', { title });
+    };
     const onRequestCreated = () => {
       queryClient.invalidateQueries({ queryKey: ['technician', 'jobs'] });
     };
@@ -66,16 +79,18 @@ export function SocketProvider({ children }) {
     };
 
     socket.on('notification:new', onNotification);
+    socket.on('chat:message', onChatMessage);
     socket.on('request:created', onRequestCreated);
     socket.on('technician:verified', onTechnicianChanged);
     socket.on('technician:updated', onTechnicianChanged);
     return () => {
       socket.off('notification:new', onNotification);
+      socket.off('chat:message', onChatMessage);
       socket.off('request:created', onRequestCreated);
       socket.off('technician:verified', onTechnicianChanged);
       socket.off('technician:updated', onTechnicianChanged);
     };
-  }, [socket, queryClient, toast]);
+  }, [socket, queryClient, toast, user.id]);
 
   return (
     <SocketContext.Provider value={{ socket, connected }}>{children}</SocketContext.Provider>

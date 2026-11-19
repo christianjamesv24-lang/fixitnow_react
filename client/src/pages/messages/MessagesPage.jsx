@@ -7,8 +7,6 @@ import { Avatar, ErrorState, Spinner, StatusBadge } from '../../components/ui';
 import { useAuth } from '../../contexts/AuthContext';
 import { useSocket } from '../../contexts/SocketContext';
 import { cn, timeAgo } from '../../lib/utils';
-import { showDesktopNotification } from '../../lib/desktopNotifications';
-import { useToast } from '../../contexts/ToastContext';
 import ChatWindow from '../../components/chat/ChatWindow';
 import DesktopNotificationOptIn from '../../components/DesktopNotificationOptIn';
 
@@ -28,7 +26,6 @@ function conversationName(conversation, userId, isAdmin) {
 export default function MessagesPage() {
   const { user } = useAuth();
   const { socket } = useSocket();
-  const toast = useToast();
   const queryClient = useQueryClient();
   const [searchParams, setSearchParams] = useSearchParams();
   const [search, setSearch] = useState('');
@@ -86,18 +83,6 @@ export default function MessagesPage() {
         return { ...data, items: nextItems };
       });
       if (!exists) queryClient.invalidateQueries({ queryKey: ['conversations'] });
-
-      if (Number(message.senderId) !== Number(user.id)) {
-        const title = `New message from ${message.sender?.name || 'FixitNow'}`;
-        const body = previewText(message);
-        showDesktopNotification({
-          title,
-          body,
-          url: `/messages?conversation=${message.conversationId}`,
-          tag: `chat-${message.id}`,
-        });
-        toast.info(body, { title });
-      }
     }
     function onPresence(payload) {
       queryClient.setQueryData(['conversations'], (data) => {
@@ -140,7 +125,7 @@ export default function MessagesPage() {
       socket.off('chat:message', onMessage);
       socket.off('presence:update', onPresence);
     };
-  }, [socket, queryClient, user.id, rawSelectedId, toast]);
+  }, [socket, queryClient, user.id, rawSelectedId]);
 
   const filteredItems = useMemo(() => {
     const term = search.trim().toLowerCase();

@@ -14,6 +14,8 @@ import {
   syncOfflineMessages,
   syncOfflineRequests,
 } from '../lib/offlineRequests';
+import { showDesktopNotification } from '../lib/desktopNotifications';
+import { fetchPushConfig, subscribeToPush } from '../lib/push';
 
 const adminNav = [
   { label: 'Overview', to: '/admin', icon: 'dashboard', end: true },
@@ -264,6 +266,29 @@ export default function AppShell() {
   const { user, logout } = useAuth();
   const queryClient = useQueryClient();
   const nav = user.role === 'admin' ? adminNav : technicianNav;
+
+  useEffect(() => {
+    if (typeof Notification === 'undefined' || Notification.permission !== 'default') return undefined;
+    const request = () => {
+      Notification.requestPermission()
+        .then((permission) => {
+          if (permission === 'granted') {
+            showDesktopNotification({
+              title: 'Notifications enabled',
+              body: 'You will be notified here for messages and updates.',
+              url: '/notifications',
+              tag: 'fixitnow-enabled',
+            });
+            fetchPushConfig()
+              .then((config) => (config.configured ? subscribeToPush(config.publicKey) : null))
+              .catch(() => {});
+          }
+        })
+        .catch(() => {});
+    };
+    document.addEventListener('pointerdown', request, { once: true });
+    return () => document.removeEventListener('pointerdown', request);
+  }, []);
 
   useEffect(() => {
     const flushRequests = () => {
