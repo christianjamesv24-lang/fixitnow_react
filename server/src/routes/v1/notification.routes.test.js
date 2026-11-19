@@ -6,6 +6,7 @@ describe('notification routes', () => {
     ['get', '/api/v1/notifications/push/config'],
     ['post', '/api/v1/notifications/push/subscribe'],
     ['post', '/api/v1/notifications/push/unsubscribe'],
+    ['post', '/api/v1/notifications/push/test'],
   ])('registers %s %s and requires authentication', async (method, path) => {
     const response = await request(app)[method](path);
 

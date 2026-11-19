@@ -4,6 +4,7 @@ import ApiError from '../utils/ApiError.js';
 import asyncHandler from '../utils/asyncHandler.js';
 import { getPagination, pagedData } from '../utils/pagination.js';
 import { isPushConfigured } from '../services/push.service.js';
+import { notifyUser } from '../services/notification.service.js';
 
 export const pushConfig = asyncHandler(async (req, res) => {
   const subscription = await PushSubscription.findOne({ where: { userId: req.user.id } });
@@ -57,6 +58,17 @@ export const listNotifications = asyncHandler(async (req, res) => {
     message: 'OK',
     data: { ...pagedData(rows, count, page, limit), unread },
   });
+});
+
+export const sendTestNotification = asyncHandler(async (req, res) => {
+  await notifyUser({
+    userId: req.user.id,
+    type: 'system',
+    title: 'Realtime notification test',
+    body: 'If you can see this, live notifications are working.',
+    data: { url: '/notifications' },
+  });
+  res.json({ success: true, message: 'Test notification sent', data: null });
 });
 
 export const unreadCount = asyncHandler(async (req, res) => {

@@ -7,6 +7,25 @@ import { useToast } from './ToastContext';
 
 const SocketContext = createContext(null);
 
+function showDesktopNotification(notification) {
+  if (typeof Notification === 'undefined' || Notification.permission !== 'granted') return;
+  try {
+    const instance = new Notification(notification.title, {
+      body: notification.body || '',
+      tag: `notification-${notification.id}`,
+      icon: '/icons/icon-192.png',
+      data: { url: notification.data?.url || '/notifications' },
+    });
+    instance.onclick = () => {
+      window.focus();
+      const url = new URL(notification.data?.url || '/notifications', window.location.origin).href;
+      window.location.assign(url);
+    };
+  } catch {
+    return;
+  }
+}
+
 export function SocketProvider({ children }) {
   const { token, user } = useAuth();
   const queryClient = useQueryClient();
@@ -28,7 +47,10 @@ export function SocketProvider({ children }) {
       reconnectionDelay: 1000,
     });
     setSocket(instance);
-    const onConnect = () => setConnected(true);
+    const onConnect = () => {
+      setConnected(true);
+      queryClient.invalidateQueries({ queryKey: ['notifications'] });
+    };
     const onDisconnect = () => setConnected(false);
     instance.on('connect', onConnect);
     instance.on('disconnect', onDisconnect);
@@ -37,14 +59,16 @@ export function SocketProvider({ children }) {
       instance.off('disconnect', onDisconnect);
       instance.disconnect();
     };
-  }, [token, user]);
+  }, [token, user, queryClient]);
 
   useEffect(() => {
     if (!socket) return undefined;
 
     const onNotification = (notification) => {
       queryClient.invalidateQueries({ queryKey: ['notifications'] });
-      if (notification?.title) toast.info(notification.body || notification.title, { title: notification.title });
+      if (!notification?.title) return;
+      showDesktopNotification(notification);
+      toast.info(notification.body || notification.title, { title: notification.title });
     };
     const onRequestCreated = () => {
       queryClient.invalidateQueries({ queryKey: ['technician', 'jobs'] });

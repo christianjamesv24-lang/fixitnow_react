@@ -133,6 +133,12 @@ export default function ProfilePage() {
     onError: (error) => toast.error(apiErrorMessage(error, 'Could not disable notifications')),
   });
 
+  const testPushMutation = useMutation({
+    mutationFn: () => api.post('/notifications/push/test'),
+    onSuccess: () => toast.success('Test notification sent. Check your screen.'),
+    onError: (error) => toast.error(apiErrorMessage(error, 'Could not send a test notification')),
+  });
+
   if (!user) return <PageLoader />;
 
   function openAddressModal(address = null) {
@@ -484,6 +490,15 @@ export default function ProfilePage() {
                 Enable desktop notifications
               </button>
             )}
+            <button
+              type="button"
+              className="btn-secondary"
+              onClick={() => testPushMutation.mutate()}
+              disabled={testPushMutation.isPending}
+            >
+              {testPushMutation.isPending && <Spinner />}
+              Send test notification
+            </button>
             <button type="button" className="btn-ghost" onClick={() => pushConfigQuery.refetch()}>
               Refresh status
             </button>
