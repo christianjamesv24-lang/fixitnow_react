@@ -103,6 +103,7 @@ function SidebarContent({ nav, user, logout, onNavigate }) {
 
 function StaffShell({ nav, user, logout }) {
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const location = useLocation();
 
   return (
     <div className="min-h-dvh bg-slate-50">
@@ -156,7 +157,12 @@ function StaffShell({ nav, user, logout }) {
             </div>
           </div>
         </header>
-        <main className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:py-8">
+        <main
+          className={cn(
+            'mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:py-8',
+            location.pathname.startsWith('/messages') && 'h-[calc(100dvh-4rem)] max-w-none p-0'
+          )}
+        >
           <Outlet />
         </main>
       </div>
@@ -209,7 +215,9 @@ function CustomerShell({ user, logout }) {
       <main
         className={cn(
           'mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:py-8',
-          location.pathname.startsWith('/messages') ? 'pb-2' : 'pb-24 md:pb-10'
+          location.pathname.startsWith('/messages')
+            ? 'h-[calc(100dvh-4rem)] max-w-none p-0'
+            : 'pb-24 md:pb-10'
         )}
       >
         <Outlet />

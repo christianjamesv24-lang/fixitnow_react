@@ -4,27 +4,9 @@ import { io } from 'socket.io-client';
 import { SOCKET_URL } from '../lib/api';
 import { useAuth } from './AuthContext';
 import { useToast } from './ToastContext';
+import { showDesktopNotification } from '../lib/desktopNotifications';
 
 const SocketContext = createContext(null);
-
-function showDesktopNotification(notification) {
-  if (typeof Notification === 'undefined' || Notification.permission !== 'granted') return;
-  try {
-    const instance = new Notification(notification.title, {
-      body: notification.body || '',
-      tag: `notification-${notification.id}`,
-      icon: '/icons/icon-192.png',
-      data: { url: notification.data?.url || '/notifications' },
-    });
-    instance.onclick = () => {
-      window.focus();
-      const url = new URL(notification.data?.url || '/notifications', window.location.origin).href;
-      window.location.assign(url);
-    };
-  } catch {
-    return;
-  }
-}
 
 export function SocketProvider({ children }) {
   const { token, user } = useAuth();
@@ -67,7 +49,13 @@ export function SocketProvider({ children }) {
     const onNotification = (notification) => {
       queryClient.invalidateQueries({ queryKey: ['notifications'] });
       if (!notification?.title) return;
-      showDesktopNotification(notification);
+      showDesktopNotification({
+        id: notification.id,
+        title: notification.title,
+        body: notification.body,
+        url: notification.data?.url,
+        tag: `notification-${notification.id}`,
+      });
       toast.info(notification.body || notification.title, { title: notification.title });
     };
     const onRequestCreated = () => {
