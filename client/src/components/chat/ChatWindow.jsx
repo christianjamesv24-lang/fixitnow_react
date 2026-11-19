@@ -377,7 +377,7 @@ export default function ChatWindow({ conversation, onBack }) {
   });
 
   return (
-    <div className="flex h-full min-h-0 flex-col bg-slate-50/60">
+    <div className="flex h-full min-h-0 w-full min-w-0 flex-1 flex-col bg-slate-50/60">
       <header className="flex items-center gap-3 border-b border-slate-200 bg-white px-3 py-3 sm:px-4">
         <button
           type="button"
