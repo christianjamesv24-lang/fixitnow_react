@@ -47,10 +47,24 @@ async function getGoogleAccessToken() {
 
   const body = await response.text();
   if (!response.ok) {
+    cachedAccessToken = null;
+    cachedAccessTokenExpiry = 0;
     const error = new Error('Google OAuth token request failed.');
     error.code = 'GOOGLE_OAUTH';
     error.responseCode = response.status;
     error.details = body;
+
+    let failure;
+    try {
+      failure = JSON.parse(body);
+    } catch {
+      failure = null;
+    }
+    if (failure?.error === 'invalid_grant') {
+      error.code = 'GOOGLE_REFRESH_TOKEN_EXPIRED';
+      error.message = 'Google OAuth refresh token is invalid or expired.';
+    }
+
     throw error;
   }
 
@@ -101,6 +115,8 @@ async function sendViaGmailApi({ to, subject, text, html }) {
 
   const responseBody = await response.text();
   if (!response.ok) {
+    cachedAccessToken = null;
+    cachedAccessTokenExpiry = 0;
     const error = new Error('Gmail API rejected the message.');
     error.code = 'GMAIL_API';
     error.responseCode = response.status;
@@ -120,21 +136,28 @@ export async function sendMail(message) {
     );
   }
 
+  let oauthError;
   if (hasGoogleOAuthCredentials()) {
     try {
       return await sendViaGmailApi(message);
-    } catch (oauthError) {
-      if (!env.smtp.appPassword) throw oauthError;
+    } catch (error) {
+      oauthError = error;
+      if (!env.smtp.appPassword) throw error;
 
       console.error('Gmail API failed; retrying with the configured Gmail App Password.', {
-        code: oauthError.code || 'UNKNOWN',
-        responseCode: oauthError.responseCode,
-        message: oauthError.message,
+        code: error.code || 'UNKNOWN',
+        responseCode: error.responseCode,
+        message: error.message,
       });
     }
   }
 
-  return createSmtpTransporter().sendMail({ from: env.smtp.from, ...message });
+  try {
+    return await createSmtpTransporter().sendMail({ from: env.smtp.from, ...message });
+  } catch (error) {
+    error.oauthError = oauthError;
+    throw error;
+  }
 }
 
 export async function verifyEmailTransport() {
@@ -151,6 +174,12 @@ export async function verifyEmailTransport() {
   }
 
   await createSmtpTransporter().verify();
+}
+
+function describeDeliveryError(error) {
+  if (!error) return null;
+  const status = error.responseCode ? ` HTTP ${error.responseCode}` : '';
+  return `${error.code || 'UNKNOWN'}${status}: ${error.message}`;
 }
 
 export async function sendPasswordResetEmail({ to, name, token }) {
@@ -178,6 +207,14 @@ export async function sendPasswordResetEmail({ to, name, token }) {
       ].join('\n'),
     });
   } catch (error) {
+    const causes = [];
+    if (error.oauthError) {
+      causes.push(`Gmail API ${describeDeliveryError(error.oauthError)}`);
+      causes.push(`SMTP ${describeDeliveryError(error)}`);
+    } else {
+      causes.push(describeDeliveryError(error));
+    }
+
     console.error('Gmail could not deliver a password recovery email.', {
       transport: hasGoogleOAuthCredentials() ? 'gmail-api-oauth2' : 'app-password',
       code: error.code || 'UNKNOWN',
@@ -185,10 +222,11 @@ export async function sendPasswordResetEmail({ to, name, token }) {
       command: error.command,
       message: error.message,
       details: error.details,
+      oauthError: error.oauthError ? describeDeliveryError(error.oauthError) : undefined,
     });
     throw new ApiError(
       503,
-      'Password recovery email could not be delivered. Check the Gmail OAuth2/SMTP settings.'
+      `Password recovery email could not be delivered (${causes.join('; ')}). Check the Gmail OAuth2/SMTP settings.`
     );
   }
 }
