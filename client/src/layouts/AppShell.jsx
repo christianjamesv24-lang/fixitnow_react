@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { Link, NavLink, Outlet, useLocation } from 'react-router-dom';
 import Logo from '../components/Logo';
 import Icon from '../components/Icon';
@@ -7,6 +8,7 @@ import NotificationBell from '../components/NotificationBell';
 import OfflineBanner from '../components/OfflineBanner';
 import { useAuth } from '../contexts/AuthContext';
 import { cn } from '../lib/utils';
+import { syncOfflineRequests } from '../lib/offlineRequests';
 
 const adminNav = [
   { label: 'Overview', to: '/admin', icon: 'dashboard', end: true },
@@ -247,11 +249,29 @@ function CustomerShell({ user, logout }) {
 
 export default function AppShell() {
   const { user, logout } = useAuth();
+  const queryClient = useQueryClient();
   const nav = user.role === 'admin' ? adminNav : technicianNav;
+
+  useEffect(() => {
+    if (user.role !== 'customer') return undefined;
+    const sync = () => {
+      syncOfflineRequests(user.id)
+        .then((sent) => {
+          if (sent) {
+            queryClient.invalidateQueries({ queryKey: ['requests'] });
+            queryClient.invalidateQueries({ queryKey: ['dashboard', 'customer'] });
+          }
+        })
+        .catch((error) => console.error('Could not sync offline service requests.', error));
+    };
+    sync();
+    window.addEventListener('online', sync);
+    return () => window.removeEventListener('online', sync);
+  }, [queryClient, user.id, user.role]);
 
   return (
     <>
-      <OfflineBanner />
+      <OfflineBanner canQueueRequests={user.role === 'customer'} />
       {user.role === 'customer' ? (
         <CustomerShell user={user} logout={logout} />
       ) : (

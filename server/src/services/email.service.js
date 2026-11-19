@@ -121,7 +121,17 @@ export async function sendMail(message) {
   }
 
   if (hasGoogleOAuthCredentials()) {
-    return sendViaGmailApi(message);
+    try {
+      return await sendViaGmailApi(message);
+    } catch (oauthError) {
+      if (!env.smtp.appPassword) throw oauthError;
+
+      console.error('Gmail API failed; retrying with the configured Gmail App Password.', {
+        code: oauthError.code || 'UNKNOWN',
+        responseCode: oauthError.responseCode,
+        message: oauthError.message,
+      });
+    }
   }
 
   return createSmtpTransporter().sendMail({ from: env.smtp.from, ...message });

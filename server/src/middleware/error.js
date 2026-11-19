@@ -49,7 +49,10 @@ export function errorHandler(error, req, res, next) {
 
   res.status(statusCode).json({
     success: false,
-    message: env.nodeEnv === 'production' && statusCode >= 500 ? 'Internal server error' : message,
+    message:
+      env.nodeEnv === 'production' && statusCode >= 500 && !error.isOperational
+        ? 'Internal server error'
+        : message,
     ...(errors ? { errors } : {}),
   });
 }

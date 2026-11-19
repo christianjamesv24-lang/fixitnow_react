@@ -7,12 +7,6 @@ import { useToast } from '../../contexts/ToastContext';
 import Icon from '../../components/Icon';
 import { Field, Spinner } from '../../components/ui';
 
-const demoAccounts = [
-  { label: 'Customer', email: 'maria@example.com', password: 'Customer123!' },
-  { label: 'Technician', email: 'carlos.tech@example.com', password: 'Tech123!' },
-  { label: 'Admin', email: 'admin@fixitnow.test', password: 'Admin123!' },
-];
-
 export default function LoginPage() {
   const { login } = useAuth();
   const toast = useToast();
@@ -22,7 +16,6 @@ export default function LoginPage() {
   const {
     register,
     handleSubmit,
-    setValue,
     formState: { errors, isSubmitting },
   } = useForm({ defaultValues: { email: '', password: '' } });
 
@@ -36,11 +29,6 @@ export default function LoginPage() {
     } catch (error) {
       toast.error(apiErrorMessage(error, 'Unable to log in'));
     }
-  }
-
-  function fillDemo(account) {
-    setValue('email', account.email);
-    setValue('password', account.password);
   }
 
   return (
@@ -95,30 +83,6 @@ export default function LoginPage() {
           {isSubmitting ? 'Signing in…' : 'Sign in'}
         </button>
       </form>
-
-      <div className="mt-6">
-        <div className="relative text-center">
-          <span className="relative z-10 bg-slate-50 px-3 text-xs font-semibold uppercase tracking-wide text-slate-400">
-            Demo accounts
-          </span>
-          <span className="absolute inset-x-0 top-1/2 h-px bg-slate-200" />
-        </div>
-        <div className="mt-3 grid grid-cols-3 gap-2">
-          {demoAccounts.map((account) => (
-            <button
-              key={account.label}
-              type="button"
-              onClick={() => fillDemo(account)}
-              className="btn-secondary btn-sm"
-            >
-              {account.label}
-            </button>
-          ))}
-        </div>
-        <p className="mt-2 text-center text-[11px] text-slate-400">
-          Tapping a demo account fills the form. Credentials are documented in the README.
-        </p>
-      </div>
 
       <p className="mt-8 text-center text-sm text-slate-500">
         New to FixitNow?{' '}

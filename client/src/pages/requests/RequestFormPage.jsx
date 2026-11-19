@@ -7,6 +7,8 @@ import Icon from '../../components/Icon';
 import { Avatar, ErrorState, Field, PageHeader, PageLoader, Spinner, VerifiedBadge } from '../../components/ui';
 import { useToast } from '../../contexts/ToastContext';
 import { cn, formatDate, todayISO } from '../../lib/utils';
+import { useAuth } from '../../contexts/AuthContext';
+import { cacheOfflineFormData, getCachedOfflineFormData, queueOfflineRequest } from '../../lib/offlineRequests';
 
 const TIME_SLOTS = [
   '08:00-10:00',
@@ -83,23 +85,54 @@ export default function RequestFormPage() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const toast = useToast();
+  const { user } = useAuth();
   const [searchParams] = useSearchParams();
   const [preferredId, setPreferredId] = useState(searchParams.get('technicianId'));
   const [photos, setPhotos] = useState([]);
   const [formError, setFormError] = useState('');
   const [locating, setLocating] = useState(false);
+  const [queuePending, setQueuePending] = useState(false);
   const photosRef = useRef([]);
   const initialized = useRef(false);
 
   const metaQuery = useQuery({
     queryKey: ['request-form', 'meta'],
-    queryFn: () => api.get('/technicians/meta').then((res) => res.data.data),
+    queryFn: async () => {
+      try {
+        const response = await api.get('/technicians/meta');
+        cacheOfflineFormData('request-form:meta', response.data.data).catch((error) => {
+          console.error('Could not cache request form categories for offline use.', error);
+        });
+        return response.data.data;
+      } catch (error) {
+        if (!navigator.onLine) {
+          const cached = await getCachedOfflineFormData('request-form:meta');
+          if (cached) return cached;
+        }
+        throw error;
+      }
+    },
     staleTime: 5 * 60 * 1000,
   });
 
   const addressesQuery = useQuery({
-    queryKey: ['addresses', 'list'],
-    queryFn: () => api.get('/users/me/addresses').then((res) => res.data.data.items),
+    queryKey: ['addresses', 'list', user.id],
+    queryFn: async () => {
+      try {
+        const response = await api.get('/users/me/addresses');
+        const addresses = response.data.data.items;
+        cacheOfflineFormData(`request-form:addresses:${user.id}`, addresses).catch((error) => {
+          console.error('Could not cache saved addresses for offline use.', error);
+        });
+        return addresses;
+      } catch (error) {
+        if (!navigator.onLine) {
+          const cached = await getCachedOfflineFormData(`request-form:addresses:${user.id}`);
+          if (cached) return cached;
+        }
+        throw error;
+      }
+    },
   });
 
   const requestQuery = useQuery({
@@ -216,6 +249,14 @@ export default function RequestFormPage() {
         address,
         ...(current || []).filter((item) => item.id !== address.id),
       ]);
+      queryClient.setQueryData(['addresses', 'list', user.id], (current) => [
+        address,
+        ...(current || []).filter((item) => item.id !== address.id),
+      ]);
+      cacheOfflineFormData(`request-form:addresses:${user.id}`, [
+        address,
+        ...addresses.filter((item) => item.id !== address.id),
+      ]).catch((error) => console.error('Could not update cached saved addresses.', error));
       queryClient.invalidateQueries({ queryKey: ['addresses'] });
       setValue('addressMode', 'saved', { shouldDirty: true });
       setValue('savedAddressId', String(address.id), { shouldDirty: true });
@@ -224,7 +265,7 @@ export default function RequestFormPage() {
     onError: (error) => toast.error(apiErrorMessage(error, 'Address could not be saved.')),
   });
 
-  const isSubmitting = createMutation.isPending || updateMutation.isPending;
+  const isSubmitting = createMutation.isPending || updateMutation.isPending || queuePending;
   const selectedCategory = categories.find((category) => String(category.id) === String(categoryId));
   const selectedAddress = addresses.find((item) => String(item.id) === String(savedAddressId));
 
@@ -432,6 +473,31 @@ export default function RequestFormPage() {
         formData.append('preferredTechnicianId', String(preferredId));
       }
       photos.forEach((photo) => formData.append('photos', photo.file));
+
+      if (!navigator.onLine) {
+        const entries = Array.from(formData.entries());
+        const addressSummary =
+          values.addressMode === 'saved'
+            ? selectedAddress?.address || ''
+            : values.address.trim();
+        setQueuePending(true);
+        try {
+          await queueOfflineRequest(user.id, entries, {
+            category: selectedCategory?.name || 'Service request',
+            issueDescription: values.issueDescription.trim(),
+            preferredDate: values.preferredDate,
+            timeSlot: values.timeSlot,
+            address: addressSummary,
+            city: values.addressMode === 'saved' ? selectedAddress?.city || '' : values.city.trim(),
+            photoCount: photos.length,
+          });
+        } finally {
+          setQueuePending(false);
+        }
+        toast.success('Request saved on this device. It will be sent when you reconnect.');
+        navigate('/requests');
+        return;
+      }
 
       const created = await createMutation.mutateAsync(formData);
       queryClient.invalidateQueries({ queryKey: ['requests'] });

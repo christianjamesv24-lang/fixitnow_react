@@ -1,7 +1,8 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import Icon from './Icon';
 import { cn, initials, STATUS_STYLES, titleCase } from '../lib/utils';
+import { publicAssetUrl } from '../lib/api';
 
 export function Spinner({ className = 'h-5 w-5' }) {
   return (
@@ -25,7 +26,7 @@ export function PageLoader({ label = 'Loading…' }) {
   );
 }
 
-export function Avatar({ name = '', src, size = 'md', className = '' }) {
+function AvatarFallback({ name, size, className }) {
   const sizes = {
     xs: 'h-7 w-7 text-[10px]',
     sm: 'h-9 w-9 text-xs',
@@ -33,15 +34,6 @@ export function Avatar({ name = '', src, size = 'md', className = '' }) {
     lg: 'h-16 w-16 text-lg',
     xl: 'h-24 w-24 text-2xl',
   };
-  if (src) {
-    return (
-      <img
-        src={src}
-        alt={name}
-        className={cn('shrink-0 rounded-full object-cover ring-2 ring-white', sizes[size], className)}
-      />
-    );
-  }
   return (
     <span
       className={cn(
@@ -54,6 +46,41 @@ export function Avatar({ name = '', src, size = 'md', className = '' }) {
       {initials(name) || '?'}
     </span>
   );
+}
+
+function AvatarImage({ name, src, size, className }) {
+  const [failed, setFailed] = useState(false);
+  const sizes = {
+    xs: 'h-7 w-7',
+    sm: 'h-9 w-9',
+    md: 'h-11 w-11',
+    lg: 'h-16 w-16',
+    xl: 'h-24 w-24',
+  };
+  if (failed) return <AvatarFallback name={name} size={size} className={className} />;
+  return (
+    <img
+      src={publicAssetUrl(src)}
+      alt={name}
+      onError={() => setFailed(true)}
+      className={cn('shrink-0 rounded-full object-cover ring-2 ring-white', sizes[size], className)}
+    />
+  );
+}
+
+export function Avatar({ name = '', src, size = 'md', className = '' }) {
+  if (src) {
+    return (
+      <AvatarImage
+        key={src}
+        name={name}
+        src={src}
+        size={size}
+        className={className}
+      />
+    );
+  }
+  return <AvatarFallback name={name} size={size} className={className} />;
 }
 
 export function VerifiedBadge({ className = '' }) {

@@ -4,6 +4,15 @@ export const API_BASE = import.meta.env.VITE_API_URL || '/api/v1';
 export const SOCKET_URL = import.meta.env.VITE_SOCKET_URL || window.location.origin;
 const TOKEN_KEY = 'fixitnow_access_token';
 
+export function publicAssetUrl(url) {
+  if (!url) return '';
+  try {
+    return new URL(url, new URL(API_BASE, window.location.origin)).toString();
+  } catch {
+    return url;
+  }
+}
+
 export function getToken() {
   return localStorage.getItem(TOKEN_KEY);
 }
