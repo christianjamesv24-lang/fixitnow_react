@@ -8,6 +8,11 @@ import { useAuth } from '../../contexts/AuthContext';
 import { useSocket } from '../../contexts/SocketContext';
 import { useToast } from '../../contexts/ToastContext';
 import { cn, formatDate, formatTime, timeAgo } from '../../lib/utils';
+import {
+  getQueuedOfflineMessages,
+  queueOfflineMessage,
+  subscribeToOfflineMessages,
+} from '../../lib/offlineRequests';
 
 const EMOJIS = ['👍', '🙏', '😊', '🔧', '⏰', '✅', '📷', '❓'];
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -49,6 +54,7 @@ export default function ChatWindow({ conversation, onBack }) {
   const [sharingLocation, setSharingLocation] = useState(false);
   const [emojiOpen, setEmojiOpen] = useState(false);
   const [typingName, setTypingName] = useState('');
+  const [queuedCount, setQueuedCount] = useState(0);
   const bottomRef = useRef(null);
   const textareaRef = useRef(null);
   const typingSentAt = useRef(0);
@@ -60,6 +66,25 @@ export default function ChatWindow({ conversation, onBack }) {
     () => ['conversations', conversation.id, 'messages'],
     [conversation.id]
   );
+
+  useEffect(() => {
+    let active = true;
+    const refresh = () => {
+      getQueuedOfflineMessages()
+        .then((records) => {
+          if (active) {
+            setQueuedCount(records.filter((record) => record.conversationId === conversation.id).length);
+          }
+        })
+        .catch(() => {});
+    };
+    refresh();
+    const unsubscribe = subscribeToOfflineMessages(refresh);
+    return () => {
+      active = false;
+      unsubscribe();
+    };
+  }, [conversation.id]);
 
   const messagesQuery = useInfiniteQuery({
     queryKey: messagesKey,
@@ -263,8 +288,13 @@ export default function ChatWindow({ conversation, onBack }) {
       queryClient.invalidateQueries({ queryKey: ['conversations'] });
       textareaRef.current?.focus();
     } catch (error) {
-      setText(body);
-      toast.error(apiErrorMessage(error, 'Message could not be sent'));
+      if (!navigator.onLine || !socket?.connected) {
+        await queueOfflineMessage(conversation.id, body);
+        toast.info('Message saved on this device. It will send when you reconnect.');
+      } else {
+        setText(body);
+        toast.error(apiErrorMessage(error, 'Message could not be sent'));
+      }
     } finally {
       setSending(false);
     }
@@ -580,6 +610,12 @@ export default function ChatWindow({ conversation, onBack }) {
           </div>
         ) : (
           <form onSubmit={sendText}>
+            {queuedCount > 0 && (
+              <p className="mb-2 flex items-center gap-1.5 text-xs text-amber-700">
+                <Icon name="clock" className="h-3.5 w-3.5" />
+                {queuedCount} message{queuedCount === 1 ? '' : 's'} waiting to send
+              </p>
+            )}
             <div className="relative flex items-end gap-1.5">
               <label
                 className={cn(

@@ -8,7 +8,12 @@ import NotificationBell from '../components/NotificationBell';
 import OfflineBanner from '../components/OfflineBanner';
 import { useAuth } from '../contexts/AuthContext';
 import { cn } from '../lib/utils';
-import { syncOfflineRequests } from '../lib/offlineRequests';
+import {
+  MESSAGE_SYNC_TAG,
+  REQUEST_SYNC_TAG,
+  syncOfflineMessages,
+  syncOfflineRequests,
+} from '../lib/offlineRequests';
 
 const adminNav = [
   { label: 'Overview', to: '/admin', icon: 'dashboard', end: true },
@@ -253,20 +258,48 @@ export default function AppShell() {
   const nav = user.role === 'admin' ? adminNav : technicianNav;
 
   useEffect(() => {
-    if (user.role !== 'customer') return undefined;
-    const sync = () => {
-      syncOfflineRequests(user.id)
-        .then((sent) => {
-          if (sent) {
-            queryClient.invalidateQueries({ queryKey: ['requests'] });
-            queryClient.invalidateQueries({ queryKey: ['dashboard', 'customer'] });
-          }
-        })
-        .catch((error) => console.error('Could not sync offline service requests.', error));
+    const flushRequests = () => {
+      if (user.role !== 'customer') return Promise.resolve(0);
+      return syncOfflineRequests(user.id).then((sent) => {
+        if (sent) {
+          queryClient.invalidateQueries({ queryKey: ['requests'] });
+          queryClient.invalidateQueries({ queryKey: ['dashboard', 'customer'] });
+        }
+        return sent;
+      });
     };
-    sync();
-    window.addEventListener('online', sync);
-    return () => window.removeEventListener('online', sync);
+
+    const flushMessages = () =>
+      syncOfflineMessages().then((sent) => {
+        if (sent) {
+          queryClient.invalidateQueries({ queryKey: ['conversations'] });
+          queryClient.invalidateQueries({ queryKey: ['notifications'] });
+        }
+        return sent;
+      });
+
+    const flushAll = () => {
+      flushRequests().catch((error) => console.error('Could not sync offline service requests.', error));
+      flushMessages().catch((error) => console.error('Could not sync offline messages.', error));
+    };
+
+    const onServiceWorkerMessage = (event) => {
+      if (event.data?.type !== 'fixitnow:sync') return;
+      if (event.data.tag === REQUEST_SYNC_TAG) {
+        flushRequests().catch((error) => console.error('Could not sync offline service requests.', error));
+      } else if (event.data.tag === MESSAGE_SYNC_TAG) {
+        flushMessages().catch((error) => console.error('Could not sync offline messages.', error));
+      }
+    };
+
+    flushAll();
+    window.addEventListener('online', flushAll);
+    navigator.serviceWorker?.addEventListener('message', onServiceWorkerMessage);
+
+    return () => {
+      window.removeEventListener('online', flushAll);
+      navigator.serviceWorker?.removeEventListener('message', onServiceWorkerMessage);
+    };
   }, [queryClient, user.id, user.role]);
 
   return (

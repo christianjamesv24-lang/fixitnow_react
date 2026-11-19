@@ -20,6 +20,20 @@ self.addEventListener('push', (event) => {
   event.waitUntil(self.registration.showNotification(title, options));
 });
 
+self.addEventListener('sync', (event) => {
+  if (!event.tag || !event.tag.startsWith('fixitnow-sync-')) return;
+
+  event.waitUntil(
+    self.clients
+      .matchAll({ type: 'window', includeUncontrolled: true })
+      .then((clients) => {
+        for (const client of clients) {
+          client.postMessage({ type: 'fixitnow:sync', tag: event.tag });
+        }
+      })
+  );
+});
+
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
   const url = new URL(event.notification.data?.url || '/notifications', self.location.origin).href;
