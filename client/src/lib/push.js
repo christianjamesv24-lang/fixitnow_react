@@ -20,8 +20,18 @@ export function urlBase64ToUint8Array(base64String) {
   return bytes;
 }
 
-export function fetchPushConfig() {
-  return api.get('/notifications/push/config').then((res) => res.data.data);
+export async function fetchPushConfig() {
+  const subscription = await getLocalPushSubscription();
+  const response = await api.get('/notifications/push/config', {
+    params: subscription ? { endpoint: subscription.endpoint } : {},
+  });
+  return response.data.data;
+}
+
+export async function getLocalPushSubscription() {
+  if (!isPushSupported()) return null;
+  const registration = await navigator.serviceWorker.getRegistration();
+  return registration ? registration.pushManager.getSubscription() : null;
 }
 
 export async function subscribeToPush(publicKey) {

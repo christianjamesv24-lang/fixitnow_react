@@ -174,7 +174,7 @@ export async function createMessage({
     emitToUser(userId, 'chat:message', payload);
   }
 
-  if (notify && recipient && !online) {
+  if (notify && recipient) {
     const preview =
       type === 'image'
         ? 'Sent a photo'

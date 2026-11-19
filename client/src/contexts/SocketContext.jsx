@@ -5,6 +5,7 @@ import { SOCKET_URL } from '../lib/api';
 import { useAuth } from './AuthContext';
 import { useToast } from './ToastContext';
 import { showDesktopNotification } from '../lib/desktopNotifications';
+import { getLocalPushSubscription } from '../lib/push';
 
 const SocketContext = createContext(null);
 
@@ -49,6 +50,7 @@ export function SocketProvider({ children }) {
     const onNotification = (notification) => {
       queryClient.invalidateQueries({ queryKey: ['notifications'] });
       if (!notification?.title) return;
+      if (notification.type === 'chat_message') return;
       showDesktopNotification({
         id: notification.id,
         title: notification.title,
@@ -63,12 +65,25 @@ export function SocketProvider({ children }) {
       if (!message || Number(message.senderId) === Number(user?.id)) return;
       const title = `New message from ${message?.sender?.name || 'FixitNow'}`;
       const body = message?.type === 'image' ? 'Photo' : message?.type === 'location' ? 'Shared a location' : message?.body || '';
-      showDesktopNotification({
-        title,
-        body,
-        url: `/messages?conversation=${message.conversationId}`,
-        tag: `chat-${message.id}`,
-      });
+      getLocalPushSubscription()
+        .then((subscription) => {
+          if (subscription) return;
+          showDesktopNotification({
+            title,
+            body,
+            url: `/messages?conversation=${message.conversationId}`,
+            tag: `chat-${message.id}`,
+          });
+        })
+        .catch((error) => {
+          console.error('Could not check the device push subscription.', error);
+          showDesktopNotification({
+            title,
+            body,
+            url: `/messages?conversation=${message.conversationId}`,
+            tag: `chat-${message.id}`,
+          });
+        });
       toast.info(body || 'New message', { title });
     };
     const onRequestCreated = () => {

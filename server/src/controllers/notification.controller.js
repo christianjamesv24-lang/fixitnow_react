@@ -7,7 +7,11 @@ import { isPushConfigured } from '../services/push.service.js';
 import { notifyUser } from '../services/notification.service.js';
 
 export const pushConfig = asyncHandler(async (req, res) => {
-  const subscription = await PushSubscription.findOne({ where: { userId: req.user.id } });
+  const endpoint = req.query.endpoint;
+  const subscription =
+    typeof endpoint === 'string' && endpoint.length <= 500
+      ? await PushSubscription.findOne({ where: { userId: req.user.id, endpoint } })
+      : null;
   res.json({
     success: true,
     message: 'OK',

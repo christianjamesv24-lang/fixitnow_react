@@ -26,7 +26,7 @@ export async function sendPushToUser(userId, payload) {
   if (!user || !user.pushEnabled) return;
 
   const subscriptions = await PushSubscription.findAll({ where: { userId } });
-  await Promise.allSettled(
+  const results = await Promise.allSettled(
     subscriptions.map(async (subscription) => {
       const pushSubscription = {
         endpoint: subscription.endpoint,
@@ -37,8 +37,18 @@ export async function sendPushToUser(userId, payload) {
       } catch (error) {
         if (error.statusCode === 404 || error.statusCode === 410) {
           await subscription.destroy();
+          return;
         }
+        throw error;
       }
     })
   );
+  results.forEach((result) => {
+    if (result.status === 'rejected') {
+      console.error('Push notification delivery failed.', {
+        userId,
+        statusCode: result.reason?.statusCode,
+      });
+    }
+  });
 }

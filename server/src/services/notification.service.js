@@ -34,8 +34,11 @@ export async function dispatchNotification(notification) {
       url: notification.data?.url || '/notifications',
       tag: `notification-${notification.id}`,
     });
-  } catch {
-    // Push failures must never break the business operation.
+  } catch (error) {
+    console.error('Push notification dispatch failed.', {
+      userId: notification.userId,
+      message: error.message,
+    });
   }
 }
 

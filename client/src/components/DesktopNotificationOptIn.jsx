@@ -30,9 +30,12 @@ export default function DesktopNotificationOptIn({ compact = false }) {
         toast.error('Notifications are blocked. Allow them in your browser site settings.');
         return;
       }
-      if (configQuery.data?.configured) {
-        await subscribeToPush(configQuery.data.publicKey);
+      if (!configQuery.data?.configured) {
+        toast.error('Push notifications are not configured on the server.');
+        return;
       }
+      await subscribeToPush(configQuery.data.publicKey);
+      await configQuery.refetch();
       showDesktopNotification({
         title: 'Notifications enabled',
         body: 'You will now be notified here for messages and updates.',
@@ -53,7 +56,7 @@ export default function DesktopNotificationOptIn({ compact = false }) {
     onError: () => toast.error('Could not send the test notification'),
   });
 
-  if (permission === 'granted') {
+  if (permission === 'granted' && configQuery.data?.subscribed) {
     return (
       <button
         type="button"
@@ -72,8 +75,13 @@ export default function DesktopNotificationOptIn({ compact = false }) {
       type="button"
       className={compact ? 'btn-ghost btn-sm' : 'btn-primary btn-sm'}
       onClick={enable}
-      disabled={busy || permission === 'unsupported'}
-      title="Get notifications on this laptop"
+      disabled={
+        busy ||
+        permission === 'unsupported' ||
+        configQuery.isLoading ||
+        !configQuery.data?.configured
+      }
+      title="Get notifications on this device"
     >
       {busy ? 'Enabling…' : 'Notify me'}
     </button>

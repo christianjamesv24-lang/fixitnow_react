@@ -447,8 +447,8 @@ export default function ProfilePage() {
         <div className="card mt-4 p-5 sm:p-6">
           <h2 className="text-lg font-bold text-slate-900">Desktop notifications</h2>
           <p className="mt-0.5 text-sm text-slate-500">
-            Get a notification on this laptop for new jobs, request updates and messages, even when
-            FixitNow is not open.
+            Enable notifications on each device where you want alerts for new jobs, request updates
+            and messages, even when FixitNow is not open.
           </p>
 
           <div className="mt-5 space-y-2 rounded-xl bg-slate-50 p-4 text-sm">
