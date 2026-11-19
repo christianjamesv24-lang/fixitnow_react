@@ -17,6 +17,7 @@ import {
   VerifiedBadge,
 } from '../components/ui';
 import { cn, VERIFICATION_STYLES, titleCase } from '../lib/utils';
+import { fetchPushConfig, isPushSupported, subscribeToPush, unsubscribeFromPush } from '../lib/push';
 
 const emptyAddress = { label: '', address: '', city: '', lat: '', lng: '', isDefault: false };
 
@@ -28,6 +29,9 @@ export default function ProfilePage() {
   const [tab, setTab] = useState('profile');
   const [addressModal, setAddressModal] = useState(null);
   const [locating, setLocating] = useState(false);
+  const [pushPermission, setPushPermission] = useState(
+    typeof window !== 'undefined' && 'Notification' in window ? Notification.permission : 'unsupported'
+  );
   const avatarInput = useRef(null);
 
   const profileForm = useForm({ defaultValues: { name: user?.name || '', phone: user?.phone || '' } });
@@ -46,6 +50,11 @@ export default function ProfilePage() {
     queryKey: ['technicians', 'meta'],
     queryFn: () => api.get('/technicians/meta').then((res) => res.data.data),
     staleTime: 5 * 60 * 1000,
+  });
+  const pushConfigQuery = useQuery({
+    queryKey: ['push', 'config'],
+    queryFn: fetchPushConfig,
+    enabled: tab === 'notifications',
   });
 
   const saveProfile = useMutation({
@@ -105,6 +114,25 @@ export default function ProfilePage() {
     onError: (error) => toast.error(apiErrorMessage(error)),
   });
 
+  const enablePushMutation = useMutation({
+    mutationFn: () => subscribeToPush(pushConfigQuery.data?.publicKey),
+    onSuccess: () => {
+      toast.success('Desktop notifications enabled on this device');
+      setPushPermission('granted');
+      pushConfigQuery.refetch();
+    },
+    onError: (error) => toast.error(apiErrorMessage(error, 'Could not enable notifications')),
+  });
+
+  const disablePushMutation = useMutation({
+    mutationFn: unsubscribeFromPush,
+    onSuccess: () => {
+      toast.success('Desktop notifications turned off on this device');
+      pushConfigQuery.refetch();
+    },
+    onError: (error) => toast.error(apiErrorMessage(error, 'Could not disable notifications')),
+  });
+
   if (!user) return <PageLoader />;
 
   function openAddressModal(address = null) {
@@ -160,6 +188,7 @@ export default function ProfilePage() {
     { key: 'profile', label: 'Profile', icon: 'user' },
     { key: 'addresses', label: 'Saved addresses', icon: 'map-pin' },
     { key: 'security', label: 'Security', icon: 'shield' },
+    { key: 'notifications', label: 'Notifications', icon: 'bell' },
   ];
 
   return (
@@ -381,11 +410,90 @@ export default function ProfilePage() {
                 })}
               />
             </Field>
-            <button type="submit" className="btn-primary" disabled={passwordMutation.isPending}>
-              {passwordMutation.isPending && <Spinner />}
-              Update password
+          <button type="submit" className="btn-primary" disabled={passwordMutation.isPending}>
+            {passwordMutation.isPending && <Spinner />}
+            Update password
+          </button>
+        </form>
+      </div>
+      )}
+
+      {tab === 'notifications' && (
+        <div className="card mt-4 p-5 sm:p-6">
+          <h2 className="text-lg font-bold text-slate-900">Desktop notifications</h2>
+          <p className="mt-0.5 text-sm text-slate-500">
+            Get a notification on this laptop for new jobs, request updates and messages, even when
+            FixitNow is not open.
+          </p>
+
+          <div className="mt-5 space-y-2 rounded-xl bg-slate-50 p-4 text-sm">
+            <p className="flex items-center justify-between gap-3">
+              <span className="text-slate-600">Browser support</span>
+              <span className={cn('font-semibold', isPushSupported() ? 'text-emerald-700' : 'text-rose-600')}>
+                {isPushSupported() ? 'Available' : 'Not supported'}
+              </span>
+            </p>
+            <p className="flex items-center justify-between gap-3">
+              <span className="text-slate-600">Server configuration</span>
+              <span className={cn('font-semibold', pushConfigQuery.data?.configured ? 'text-emerald-700' : 'text-rose-600')}>
+                {pushConfigQuery.isLoading
+                  ? 'Checking…'
+                  : pushConfigQuery.data?.configured
+                    ? 'Ready'
+                    : 'Unavailable'}
+              </span>
+            </p>
+            <p className="flex items-center justify-between gap-3">
+              <span className="text-slate-600">Browser permission</span>
+              <span className={cn('font-semibold', pushPermission === 'granted' ? 'text-emerald-700' : 'text-amber-700')}>
+                {titleCase(pushPermission)}
+              </span>
+            </p>
+            <p className="flex items-center justify-between gap-3">
+              <span className="text-slate-600">This device</span>
+              <span className={cn('font-semibold', pushConfigQuery.data?.subscribed ? 'text-emerald-700' : 'text-slate-700')}>
+                {pushConfigQuery.data?.subscribed ? 'Enabled' : 'Not enabled'}
+              </span>
+            </p>
+          </div>
+
+          <div className="mt-5 flex flex-wrap items-center gap-3">
+            {pushConfigQuery.data?.subscribed && pushPermission === 'granted' ? (
+              <button
+                type="button"
+                className="btn-secondary"
+                onClick={() => disablePushMutation.mutate()}
+                disabled={disablePushMutation.isPending}
+              >
+                {disablePushMutation.isPending && <Spinner />}
+                Turn off on this device
+              </button>
+            ) : (
+              <button
+                type="button"
+                className="btn-primary"
+                onClick={() => enablePushMutation.mutate()}
+                disabled={
+                  !isPushSupported() ||
+                  !pushConfigQuery.data?.configured ||
+                  pushConfigQuery.isLoading ||
+                  enablePushMutation.isPending
+                }
+              >
+                {enablePushMutation.isPending && <Spinner />}
+                Enable desktop notifications
+              </button>
+            )}
+            <button type="button" className="btn-ghost" onClick={() => pushConfigQuery.refetch()}>
+              Refresh status
             </button>
-          </form>
+          </div>
+
+          <p className="mt-4 text-xs leading-relaxed text-slate-500">
+            Allow browser notifications when prompted. Desktop delivery requires the site to be
+            opened over HTTPS (localhost is allowed during development), and Chrome or Edge must be
+            running with notifications enabled for this device.
+          </p>
         </div>
       )}
 

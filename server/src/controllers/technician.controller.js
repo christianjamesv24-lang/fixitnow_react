@@ -16,6 +16,7 @@ import { getPagination, pagedData } from '../utils/pagination.js';
 import { replaceAreas, replaceAvailability, assertCategoriesExist } from '../services/auth.service.js';
 import { DOCUMENT_TYPES } from '../utils/constants.js';
 import { SERVICE_AREAS } from '../utils/serviceArea.js';
+import { broadcast } from '../sockets/registry.js';
 
 const directoryInclude = [
   {
@@ -168,6 +169,7 @@ export const updateMyTechnicianProfile = asyncHandler(async (req, res) => {
       { association: 'availability' },
     ],
   });
+  broadcast('technician:updated', { profileId: profile.id, userId: req.user.id });
   res.json({ success: true, message: 'Profile updated', data: { profile: refreshed } });
 });
 

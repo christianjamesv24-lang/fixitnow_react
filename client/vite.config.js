@@ -39,7 +39,9 @@ export default defineConfig({
           },
         ],
       },
+      devOptions: { enabled: true },
       workbox: {
+        importScripts: ['/push-handlers.js'],
         navigateFallback: '/index.html',
         navigateFallbackDenylist: [/^\/api\//, /^\/uploads\//, /^\/socket\.io\//],
         globPatterns: ['**/*.{js,css,html,svg,png,ico,woff,woff2}'],

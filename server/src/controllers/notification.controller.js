@@ -1,7 +1,43 @@
-import { Notification } from '../models/index.js';
+import { Notification, PushSubscription } from '../models/index.js';
+import { env } from '../config/env.js';
 import ApiError from '../utils/ApiError.js';
 import asyncHandler from '../utils/asyncHandler.js';
 import { getPagination, pagedData } from '../utils/pagination.js';
+import { isPushConfigured } from '../services/push.service.js';
+
+export const pushConfig = asyncHandler(async (req, res) => {
+  const subscription = await PushSubscription.findOne({ where: { userId: req.user.id } });
+  res.json({
+    success: true,
+    message: 'OK',
+    data: {
+      publicKey: env.vapid.publicKey,
+      configured: isPushConfigured(),
+      subscribed: Boolean(subscription),
+    },
+  });
+});
+
+export const subscribePush = asyncHandler(async (req, res) => {
+  if (!isPushConfigured()) throw new ApiError(503, 'Push notifications are not configured');
+
+  const { endpoint, keys, userAgent } = req.body;
+  await PushSubscription.upsert({
+    userId: req.user.id,
+    endpoint,
+    p256dh: keys.p256dh,
+    auth: keys.auth,
+    userAgent: userAgent || null,
+  });
+  await req.user.update({ pushEnabled: true });
+
+  res.json({ success: true, message: 'Push notifications enabled', data: null });
+});
+
+export const unsubscribePush = asyncHandler(async (req, res) => {
+  await PushSubscription.destroy({ where: { userId: req.user.id, endpoint: req.body.endpoint } });
+  res.json({ success: true, message: 'Push notifications disabled for this device', data: null });
+});
 
 export const listNotifications = asyncHandler(async (req, res) => {
   const { page, limit, offset } = getPagination(req.query, 20);

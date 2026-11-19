@@ -13,6 +13,7 @@ import asyncHandler from '../utils/asyncHandler.js';
 import { getPagination, pagedData } from '../utils/pagination.js';
 import { softDeleteRecord } from '../utils/softDelete.js';
 import { notifyUser } from '../services/notification.service.js';
+import { emitToRole } from '../sockets/registry.js';
 import { ensureRequestConversation } from '../services/chat.service.js';
 import {
   createLocationShare,
@@ -274,6 +275,49 @@ export const createRequest = asyncHandler(async (req, res) => {
     body: 'We received your service request. You will be notified as soon as a technician responds.',
     data: { url: `/requests/${request.id}`, requestId: request.id },
   });
+
+  if (!technician) {
+    const matches = await TechnicianProfile.findAll({
+      where: { verificationStatus: 'verified', isAvailable: true },
+      include: [
+        {
+          association: 'user',
+          attributes: ['id'],
+          where: { isActive: true },
+          required: true,
+        },
+        {
+          association: 'skills',
+          through: { attributes: [] },
+          attributes: ['id'],
+          where: { id: body.categoryId },
+          required: true,
+        },
+        {
+          association: 'areas',
+          attributes: ['city'],
+          where: { city: address.city },
+          required: true,
+        },
+      ],
+    });
+
+    for (const match of matches) {
+      await safeNotify({
+        userId: match.userId,
+        type: 'request_available',
+        title: 'New job available',
+        body: `${req.user.name} needs a technician in ${address.city}.`,
+        data: { url: `/requests/${request.id}`, requestId: request.id },
+      });
+    }
+
+    emitToRole('technician', 'request:created', {
+      requestId: request.id,
+      categoryId: request.categoryId,
+      city: request.city,
+    });
+  }
 
   if (technician) {
     await safeNotify({

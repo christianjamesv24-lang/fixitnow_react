@@ -41,6 +41,7 @@ export function initSocket(server) {
   io.on('connection', async (socket) => {
     const userId = socket.user.id;
     socket.join(`user:${userId}`);
+    socket.join(`role:${socket.user.role}`);
     const cameOnline = addConnection(userId, socket.id);
     await User.update({ lastActiveAt: new Date() }, { where: { id: userId } }).catch(() => {});
 

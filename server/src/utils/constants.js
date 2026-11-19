@@ -31,6 +31,7 @@ export const REVIEW_TAGS = ['On time', 'Professional', 'Fair price', 'Clean work
 
 export const NOTIFICATION_TYPES = [
   'request_created',
+  'request_available',
   'request_assigned',
   'request_accepted',
   'request_declined',

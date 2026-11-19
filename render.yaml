@@ -48,6 +48,12 @@ services:
         sync: false
       - key: GOOGLE_REFRESH_TOKEN
         sync: false
+      - key: VAPID_PUBLIC_KEY
+        sync: false
+      - key: VAPID_PRIVATE_KEY
+        sync: false
+      - key: VAPID_SUBJECT
+        value: mailto:admin@fixitnow.test
       - key: UPLOADS_DIR
         value: /app/uploads
       - key: ADMIN_EMAIL

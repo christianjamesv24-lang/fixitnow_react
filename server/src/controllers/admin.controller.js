@@ -24,7 +24,8 @@ import path from 'node:path';
 import { ensureRequestConversation } from '../services/chat.service.js';
 import { recalculateTechnicianRating } from '../services/rating.service.js';
 import { revokeAllSessions } from '../services/auth.service.js';
-import { getIo } from '../sockets/registry.js';
+import { notifyUser } from '../services/notification.service.js';
+import { broadcast, getIo } from '../sockets/registry.js';
 
 const userAttributes = ['id', 'name', 'email', 'phone', 'role', 'isActive', 'createdAt'];
 
@@ -133,9 +134,25 @@ export const decideVerification = asyncHandler(async (req, res) => {
     entityType: 'TechnicianProfile',
     entityId: profile.id,
     before: { verificationStatus: before.verificationStatus },
-    after: { verificationStatus: status, verificationNote: note },
+    after: { verificationStatus: status, verificationNote: status === 'verified' ? note : profile.verificationNote },
     ip: req.ip,
   });
+
+  if (status === 'verified') {
+    broadcast('technician:verified', { profileId: profile.id, userId: profile.userId });
+  }
+  try {
+    await notifyUser({
+      userId: profile.userId,
+      type: 'verification_decision',
+      title: status === 'verified' ? 'Verification approved' : 'Verification update',
+      body: note || `Your verification status is now ${status}.`,
+      data: { url: '/technician/verification' },
+    });
+  } catch (error) {
+    console.error('Verification notification failed:', error.message);
+  }
+
   res.json({ success: true, data: { profile } });
 });
 

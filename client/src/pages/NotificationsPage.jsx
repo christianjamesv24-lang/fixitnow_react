@@ -9,6 +9,7 @@ import { cn, timeAgo } from '../lib/utils';
 
 const TYPE_ICONS = {
   request_created: 'clipboard',
+  request_available: 'briefcase',
   request_assigned: 'clipboard',
   request_accepted: 'check',
   request_declined: 'x',
