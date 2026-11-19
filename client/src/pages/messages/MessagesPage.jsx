@@ -10,6 +10,7 @@ import { cn, timeAgo } from '../../lib/utils';
 import { showDesktopNotification } from '../../lib/desktopNotifications';
 import { useToast } from '../../contexts/ToastContext';
 import ChatWindow from '../../components/chat/ChatWindow';
+import DesktopNotificationOptIn from '../../components/DesktopNotificationOptIn';
 
 function previewText(message) {
   if (!message) return 'No messages yet';
@@ -187,16 +188,19 @@ export default function MessagesPage() {
                   </span>
                 )}
               </div>
-              {user.role === 'customer' && (
-                <Link
-                  to="/technicians"
-                  className="btn-secondary btn-sm whitespace-nowrap"
-                  title="Find a technician to message"
-                >
-                  <Icon name="plus" className="h-4 w-4" />
-                  New
-                </Link>
-              )}
+              <div className="flex items-center gap-1.5">
+                <DesktopNotificationOptIn compact />
+                {user.role === 'customer' && (
+                  <Link
+                    to="/technicians"
+                    className="btn-secondary btn-sm whitespace-nowrap"
+                    title="Find a technician to message"
+                  >
+                    <Icon name="plus" className="h-4 w-4" />
+                    New
+                  </Link>
+                )}
+              </div>
             </div>
             <div className="relative mt-3">
               <Icon

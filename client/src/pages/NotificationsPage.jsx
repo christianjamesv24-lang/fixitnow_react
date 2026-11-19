@@ -6,6 +6,7 @@ import Icon from '../components/Icon';
 import { EmptyState, ErrorState, PageHeader, Pagination, Spinner } from '../components/ui';
 import { useToast } from '../contexts/ToastContext';
 import { cn, timeAgo } from '../lib/utils';
+import DesktopNotificationOptIn from '../components/DesktopNotificationOptIn';
 
 const TYPE_ICONS = {
   request_created: 'clipboard',
@@ -65,15 +66,18 @@ export default function NotificationsPage() {
         title="Notifications"
         subtitle="Live updates about requests, chat, verification and reviews."
         actions={
-          <button
-            type="button"
-            className="btn-secondary btn-sm"
-            onClick={() => markAll.mutate()}
-            disabled={markAll.isPending || !data?.unread}
-          >
-            {markAll.isPending ? <Spinner className="h-3.5 w-3.5" /> : <Icon name="check-check" className="h-4 w-4" />}
-            Mark all as read
-          </button>
+          <>
+            <DesktopNotificationOptIn compact />
+            <button
+              type="button"
+              className="btn-secondary btn-sm"
+              onClick={() => markAll.mutate()}
+              disabled={markAll.isPending || !data?.unread}
+            >
+              {markAll.isPending ? <Spinner className="h-3.5 w-3.5" /> : <Icon name="check-check" className="h-4 w-4" />}
+              Mark all as read
+            </button>
+          </>
         }
       />
 

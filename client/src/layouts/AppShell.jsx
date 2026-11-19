@@ -158,10 +158,11 @@ function StaffShell({ nav, user, logout }) {
           </div>
         </header>
         <main
-          className={cn(
-            'mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:py-8',
-            location.pathname.startsWith('/messages') && 'h-[calc(100dvh-4rem)] max-w-none p-0'
-          )}
+          className={
+            location.pathname.startsWith('/messages')
+              ? 'h-[calc(100dvh-4rem)] w-full overflow-hidden'
+              : 'mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:py-8'
+          }
         >
           <Outlet />
         </main>
@@ -213,12 +214,11 @@ function CustomerShell({ user, logout }) {
       </header>
 
       <main
-        className={cn(
-          'mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:py-8',
+        className={
           location.pathname.startsWith('/messages')
-            ? 'h-[calc(100dvh-4rem)] max-w-none p-0'
-            : 'pb-24 md:pb-10'
-        )}
+            ? 'h-[calc(100dvh-4rem)] w-full overflow-hidden'
+            : 'mx-auto max-w-7xl px-4 pb-24 py-6 sm:px-6 md:pb-10 lg:py-8'
+        }
       >
         <Outlet />
       </main>
