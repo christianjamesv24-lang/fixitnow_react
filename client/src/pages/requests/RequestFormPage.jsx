@@ -9,6 +9,7 @@ import { useToast } from '../../contexts/ToastContext';
 import { cn, formatDate, todayISO } from '../../lib/utils';
 import { useAuth } from '../../contexts/AuthContext';
 import { cacheOfflineFormData, getCachedOfflineFormData, queueOfflineRequest } from '../../lib/offlineRequests';
+import { coordinatesForCity, reverseGeocode } from '../../lib/geocode';
 
 const TIME_SLOTS = [
   '08:00-10:00',
@@ -41,43 +42,6 @@ const EMPTY_FORM = {
   lat: '',
   lng: '',
 };
-
-function formatReverseGeocodedAddress(result, serviceCities) {
-  const address = result.address || {};
-  const supportedCity = (value) =>
-    serviceCities.find((city) => city.toLowerCase() === String(value || '').trim().toLowerCase());
-  const city =
-    [
-      address.municipality,
-      address.city,
-      address.town,
-      address.village,
-      address.city_district,
-      address.suburb,
-      address.county,
-      ...Object.values(address),
-    ]
-      .map(supportedCity)
-      .find(Boolean) || '';
-  const streetParts = [
-    [address.house_number, address.road].filter(Boolean).join(' '),
-    address.building,
-    address.neighbourhood,
-    address.suburb,
-    address.quarter,
-    address.hamlet,
-    address.village,
-    address.residential,
-  ]
-    .map((part) => String(part || '').trim())
-    .filter((part) => part && part.toLowerCase() !== city.toLowerCase())
-    .filter((part, index, parts) => parts.findIndex((item) => item.toLowerCase() === part.toLowerCase()) === index);
-
-  return {
-    address: streetParts.join(', ') || result.display_name || '',
-    city,
-  };
-}
 
 export default function RequestFormPage() {
   const { id } = useParams();
@@ -355,17 +319,7 @@ export default function RequestFormPage() {
       setValue('lng', lng, { shouldValidate: true, shouldDirty: true });
       coordinatesAdded = true;
 
-      const params = new URLSearchParams({
-        format: 'jsonv2',
-        addressdetails: '1',
-        zoom: '18',
-        lat: String(lat),
-        lon: String(lng),
-      });
-      const response = await fetch(`https://nominatim.openstreetmap.org/reverse?${params}`);
-      if (!response.ok) throw new Error(`Address lookup failed (${response.status})`);
-      const result = await response.json();
-      const location = formatReverseGeocodedAddress(result, serviceCities || []);
+      const location = await reverseGeocode(lat, lng, serviceCities || []);
       setValue('address', location.address, { shouldValidate: true, shouldDirty: true });
       setValue('city', location.city, { shouldValidate: true, shouldDirty: true });
 
@@ -388,9 +342,9 @@ export default function RequestFormPage() {
   }
 
   async function saveManualAddress() {
-    const valid = await trigger(['address', 'city', 'lat', 'lng']);
+    const valid = await trigger(['address', 'city']);
     if (!valid) {
-      toast.error('Complete the address, municipality and coordinates before saving.');
+      toast.error('Complete the address and municipality before saving.');
       return;
     }
 
@@ -399,12 +353,13 @@ export default function RequestFormPage() {
       toast.error('Enter a label such as Home or Office before saving.');
       return;
     }
+    const coordinates = coordinatesForCity(values.city.trim());
     const address = {
       label: values.addressLabel.trim(),
       address: values.address.trim(),
       city: values.city,
-      lat: Number(values.lat),
-      lng: Number(values.lng),
+      lat: Number.isFinite(Number(values.lat)) ? Number(values.lat) : coordinates.lat,
+      lng: Number.isFinite(Number(values.lng)) ? Number(values.lng) : coordinates.lng,
       isDefault: false,
     };
     const duplicate = addresses.find(
@@ -464,10 +419,13 @@ export default function RequestFormPage() {
       if (values.addressMode === 'saved') {
         formData.append('savedAddressId', String(values.savedAddressId));
       } else {
+        const coordinates = coordinatesForCity(values.city.trim());
+        const lat = Number.isFinite(Number(values.lat)) ? Number(values.lat) : coordinates.lat;
+        const lng = Number.isFinite(Number(values.lng)) ? Number(values.lng) : coordinates.lng;
         formData.append('address', values.address.trim());
         formData.append('city', values.city.trim());
-        formData.append('lat', String(values.lat));
-        formData.append('lng', String(values.lng));
+        formData.append('lat', String(lat));
+        formData.append('lng', String(lng));
       }
       if (preferredId && preferredQuery.data) {
         formData.append('preferredTechnicianId', String(preferredId));
@@ -759,36 +717,11 @@ export default function RequestFormPage() {
                         </button>
                       </div>
                     </div>
-                    <div className="grid gap-4 sm:grid-cols-2">
-                      <Field label="Latitude" htmlFor="lat" error={errors.lat?.message}>
-                        <input
-                          id="lat"
-                          type="number"
-                          step="any"
-                          className="input"
-                          placeholder="13.1537659"
-                          {...register('lat', {
-                            valueAsNumber: true,
-                            validate: (value) =>
-                              Number.isFinite(value) || 'Add the latitude (open the map later)',
-                          })}
-                        />
-                      </Field>
-                      <Field label="Longitude" htmlFor="lng" error={errors.lng?.message}>
-                        <input
-                          id="lng"
-                          type="number"
-                          step="any"
-                          className="input"
-                          placeholder="121.1860637"
-                          {...register('lng', {
-                            valueAsNumber: true,
-                            validate: (value) =>
-                              Number.isFinite(value) || 'Add the longitude (open the map later)',
-                          })}
-                        />
-                      </Field>
-                    </div>
+                    <p className="flex items-start gap-1.5 text-xs text-slate-500">
+                      <Icon name="info" className="mt-0.5 h-3.5 w-3.5 shrink-0 text-brand-700" />
+                      Use my location fills in your address automatically. Otherwise, choose your
+                      municipality and we will place the map pin for you.
+                    </p>
                     <div className="rounded-xl border border-slate-200 bg-white p-4">
                       <Field
                         label="Save this address as"

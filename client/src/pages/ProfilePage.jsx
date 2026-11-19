@@ -18,6 +18,7 @@ import {
 } from '../components/ui';
 import { cn, VERIFICATION_STYLES, titleCase } from '../lib/utils';
 import { fetchPushConfig, isPushSupported, subscribeToPush, unsubscribeFromPush } from '../lib/push';
+import { coordinatesForCity, reverseGeocode } from '../lib/geocode';
 
 const emptyAddress = { label: '', address: '', city: '', lat: '', lng: '', isDefault: false };
 
@@ -157,34 +158,52 @@ export default function ProfilePage() {
     );
   }
 
-  function useCurrentLocation() {
+  async function useCurrentLocation() {
     if (!navigator.geolocation) {
       toast.error('Your browser does not support geolocation.');
       return;
     }
     setLocating(true);
-    navigator.geolocation.getCurrentPosition(
-      (position) => {
-        addressForm.setValue('lat', position.coords.latitude.toFixed(7));
-        addressForm.setValue('lng', position.coords.longitude.toFixed(7));
-        setLocating(false);
-        toast.success('Coordinates captured. Add a complete street address.');
-      },
-      () => {
-        setLocating(false);
-        toast.error('Location permission denied. Enter the coordinates manually or pick later.');
-      },
-      { enableHighAccuracy: true, timeout: 10000 }
-    );
+    try {
+      const position = await new Promise((resolve, reject) =>
+        navigator.geolocation.getCurrentPosition(resolve, reject, {
+          enableHighAccuracy: true,
+          timeout: 15000,
+        })
+      );
+      const lat = Number(position.coords.latitude.toFixed(7));
+      const lng = Number(position.coords.longitude.toFixed(7));
+      addressForm.setValue('lat', lat, { shouldValidate: true, shouldDirty: true });
+      addressForm.setValue('lng', lng, { shouldValidate: true, shouldDirty: true });
+
+      const location = await reverseGeocode(lat, lng, serviceAreasQuery.data?.cities || []);
+      addressForm.setValue('address', location.address, { shouldValidate: true, shouldDirty: true });
+      addressForm.setValue('city', location.city, { shouldValidate: true, shouldDirty: true });
+
+      if (location.address && location.city) {
+        toast.success('Address filled in. Please review the details.');
+      } else {
+        toast.warning('Location added. Review the address and choose a municipality.');
+      }
+    } catch (error) {
+      if (typeof error?.code === 'number') {
+        toast.error('We could not read your location. Check your browser permission and try again.');
+      } else {
+        toast.warning('Coordinates were added. Enter the address and municipality manually.');
+      }
+    } finally {
+      setLocating(false);
+    }
   }
 
   function submitAddress(values) {
+    const coordinates = coordinatesForCity(values.city);
     addressMutation.mutate({
       id: addressModal?.id,
       values: {
         ...values,
-        lat: Number(values.lat),
-        lng: Number(values.lng),
+        lat: Number.isFinite(Number(values.lat)) ? Number(values.lat) : coordinates.lat,
+        lng: Number.isFinite(Number(values.lng)) ? Number(values.lng) : coordinates.lng,
         isDefault: Boolean(values.isDefault),
       },
     });
@@ -554,40 +573,16 @@ export default function ProfilePage() {
             </div>
           )}
           <div className="flex items-center justify-between">
-            <p className="text-xs font-semibold text-slate-600">Map pin</p>
+            <p className="text-xs font-semibold text-slate-600">Location</p>
             <button type="button" className="btn-secondary btn-sm" onClick={useCurrentLocation} disabled={locating}>
               {locating ? <Spinner className="h-3.5 w-3.5" /> : <Icon name="locate" className="h-3.5 w-3.5" />}
-              Use my location
+              {locating ? 'Finding your address...' : 'Use my location'}
             </button>
           </div>
-          <div className="grid grid-cols-2 gap-3">
-            <Field label="Latitude" htmlFor="address-lat" error={addressForm.formState.errors.lat?.message} required>
-              <input
-                id="address-lat"
-                className="input"
-                inputMode="decimal"
-                placeholder="13.1537659"
-                {...addressForm.register('lat', {
-                  required: 'Latitude is required',
-                  min: { value: -90, message: 'Invalid latitude' },
-                  max: { value: 90, message: 'Invalid latitude' },
-                })}
-              />
-            </Field>
-            <Field label="Longitude" htmlFor="address-lng" error={addressForm.formState.errors.lng?.message} required>
-              <input
-                id="address-lng"
-                className="input"
-                inputMode="decimal"
-                placeholder="121.1860637"
-                {...addressForm.register('lng', {
-                  required: 'Longitude is required',
-                  min: { value: -180, message: 'Invalid longitude' },
-                  max: { value: 180, message: 'Invalid longitude' },
-                })}
-              />
-            </Field>
-          </div>
+          <p className="text-xs text-slate-500">
+            Use my location fills in your address automatically. Otherwise, choose your municipality
+            and we will place the map pin for you.
+          </p>
           <label className="flex items-center gap-2 text-sm text-slate-600">
             <input type="checkbox" className="h-4 w-4 rounded border-slate-300 text-brand-700" {...addressForm.register('isDefault')} />
             Make this my default address
