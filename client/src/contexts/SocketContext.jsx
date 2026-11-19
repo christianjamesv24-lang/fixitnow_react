@@ -60,7 +60,7 @@ export function SocketProvider({ children }) {
     };
     const onChatMessage = (message) => {
       queryClient.invalidateQueries({ queryKey: ['conversations'] });
-      if (Number(message?.senderId) === Number(user.id)) return;
+      if (!message || Number(message.senderId) === Number(user?.id)) return;
       const title = `New message from ${message?.sender?.name || 'FixitNow'}`;
       const body = message?.type === 'image' ? 'Photo' : message?.type === 'location' ? 'Shared a location' : message?.body || '';
       showDesktopNotification({
@@ -90,7 +90,7 @@ export function SocketProvider({ children }) {
       socket.off('technician:verified', onTechnicianChanged);
       socket.off('technician:updated', onTechnicianChanged);
     };
-  }, [socket, queryClient, toast, user.id]);
+  }, [socket, queryClient, toast, user?.id]);
 
   return (
     <SocketContext.Provider value={{ socket, connected }}>{children}</SocketContext.Provider>
