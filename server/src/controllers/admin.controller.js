@@ -24,7 +24,8 @@ import path from 'node:path';
 import { ensureRequestConversation } from '../services/chat.service.js';
 import { recalculateTechnicianRating } from '../services/rating.service.js';
 import { revokeAllSessions } from '../services/auth.service.js';
-import { notifyUser } from '../services/notification.service.js';
+import { dispatchNotification, notifyUser } from '../services/notification.service.js';
+import { createAnnouncementNotifications } from '../services/announcementNotification.service.js';
 import { broadcast, getIo } from '../sockets/registry.js';
 
 const userAttributes = ['id', 'name', 'email', 'phone', 'role', 'isActive', 'createdAt'];
@@ -335,34 +336,58 @@ export const listAdminAnnouncements = asyncHandler(async (req, res) => {
 });
 
 export const createAdminAnnouncement = asyncHandler(async (req, res) => {
-  const announcement = await Announcement.create({ ...req.body, createdBy: req.user.id });
-  await logAudit({
-    actorId: req.user.id,
-    action: 'announcement.created',
-    entityType: 'Announcement',
-    entityId: announcement.id,
-    after: announcement.toJSON(),
-    ip: req.ip,
+  const { announcement, notifications } = await sequelize.transaction(async (transaction) => {
+    const announcement = await Announcement.create(
+      { ...req.body, createdBy: req.user.id },
+      { transaction }
+    );
+    const notifications = await createAnnouncementNotifications(announcement, { transaction });
+    await logAudit({
+      actorId: req.user.id,
+      action: 'announcement.created',
+      entityType: 'Announcement',
+      entityId: announcement.id,
+      after: announcement.toJSON(),
+      ip: req.ip,
+      transaction,
+    });
+    return { announcement, notifications };
   });
+  await dispatchAnnouncementNotifications(notifications);
   res.status(201).json({ success: true, data: { announcement } });
 });
 
 export const updateAdminAnnouncement = asyncHandler(async (req, res) => {
-  const announcement = await Announcement.findByPk(req.params.id);
-  if (!announcement) throw ApiError.notFound('Announcement not found');
-  const before = announcement.toJSON();
-  await announcement.update(req.body);
-  await logAudit({
-    actorId: req.user.id,
-    action: 'announcement.updated',
-    entityType: 'Announcement',
-    entityId: announcement.id,
-    before,
-    after: announcement.toJSON(),
-    ip: req.ip,
+  const { announcement, notifications } = await sequelize.transaction(async (transaction) => {
+    const announcement = await Announcement.findByPk(req.params.id, { transaction });
+    if (!announcement) throw ApiError.notFound('Announcement not found');
+    const before = announcement.toJSON();
+    await announcement.update(req.body, { transaction });
+    const notifications = await createAnnouncementNotifications(announcement, { transaction });
+    await logAudit({
+      actorId: req.user.id,
+      action: 'announcement.updated',
+      entityType: 'Announcement',
+      entityId: announcement.id,
+      before,
+      after: announcement.toJSON(),
+      ip: req.ip,
+      transaction,
+    });
+    return { announcement, notifications };
   });
+  await dispatchAnnouncementNotifications(notifications);
   res.json({ success: true, data: { announcement } });
 });
+
+async function dispatchAnnouncementNotifications(notifications) {
+  const batchSize = 25;
+  for (let index = 0; index < notifications.length; index += batchSize) {
+    await Promise.all(
+      notifications.slice(index, index + batchSize).map(dispatchNotification)
+    );
+  }
+}
 
 export const listAdminArchive = asyncHandler(async (req, res) => {
   const modelName = ARCHIVE_MODELS[req.validatedQuery.type];
