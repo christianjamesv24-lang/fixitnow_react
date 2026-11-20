@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import api, { getToken, setToken } from '../lib/api';
+import api, { getToken, setToken, TOKEN_KEY } from '../lib/api';
 
 const AuthContext = createContext(null);
 
@@ -11,37 +11,85 @@ export function AuthProvider({ children }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    let active = true;
+    let syncId = 0;
+
     function onToken(event) {
       setTokenState(event.detail);
     }
+
     function onExpired() {
       queryClient.clear();
       setUser(null);
       setTokenState(null);
     }
+
+    function onStorage(event) {
+      if (event.key !== TOKEN_KEY) return;
+
+      const nextToken = event.newValue;
+      const currentSyncId = ++syncId;
+      queryClient.clear();
+      setTokenState(nextToken);
+      setUser(null);
+
+      if (!nextToken) {
+        setLoading(false);
+        return;
+      }
+
+      setLoading(true);
+      api.get('/auth/me', { headers: { Authorization: `Bearer ${nextToken}` } })
+        .then((response) => {
+          if (active && currentSyncId === syncId && getToken() === nextToken) {
+            setUser(response.data.data.user);
+          }
+        })
+        .catch(() => {
+          if (active && currentSyncId === syncId && getToken() === nextToken) {
+            setToken(null);
+            setUser(null);
+            setLoading(false);
+          }
+        })
+        .finally(() => {
+          if (active && currentSyncId === syncId && getToken() === nextToken) {
+            setLoading(false);
+          }
+        });
+    }
+
     window.addEventListener('session:token', onToken);
     window.addEventListener('session:expired', onExpired);
+    window.addEventListener('storage', onStorage);
     return () => {
+      active = false;
       window.removeEventListener('session:token', onToken);
       window.removeEventListener('session:expired', onExpired);
+      window.removeEventListener('storage', onStorage);
     };
   }, [queryClient]);
 
   useEffect(() => {
     let active = true;
     async function bootstrap() {
-      if (!getToken()) {
+      const currentToken = getToken();
+      if (!currentToken) {
         setLoading(false);
         return;
       }
       try {
-        const response = await api.get('/auth/me');
-        if (active) setUser(response.data.data.user);
+        const response = await api.get('/auth/me', {
+          headers: { Authorization: `Bearer ${currentToken}` },
+        });
+        if (active && getToken() === currentToken) setUser(response.data.data.user);
       } catch {
-        setToken(null);
-        if (active) setUser(null);
+        if (active && getToken() === currentToken) {
+          setToken(null);
+          setUser(null);
+        }
       } finally {
-        if (active) setLoading(false);
+        if (active && getToken() === currentToken) setLoading(false);
       }
     }
     bootstrap();

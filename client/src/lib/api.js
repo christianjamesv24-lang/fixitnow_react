@@ -2,7 +2,7 @@ import axios from 'axios';
 
 export const API_BASE = import.meta.env.VITE_API_URL || '/api/v1';
 export const SOCKET_URL = import.meta.env.VITE_SOCKET_URL || window.location.origin;
-const TOKEN_KEY = 'fixitnow_access_token';
+export const TOKEN_KEY = 'fixitnow_access_token';
 
 export function publicAssetUrl(url) {
   if (!url) return '';
